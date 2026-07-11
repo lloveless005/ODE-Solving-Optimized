@@ -10,3 +10,4 @@ The goal for this project is to start with a simple implementation of parallel O
 | Add parallelism via OpenMP | 185 ms | 212 ms |
 | Condense random parameter generation | 185 ms | 208 ms |
 | Add -ffast-math compilation flag | 159 ms | 180 ms |
+| Pass by value in ODE solver | 115 ms | 135 ms |

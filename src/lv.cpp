@@ -20,7 +20,7 @@ using Param = std::array<double, 4>;
 
 // 1. ODE
 
-State ode_val(const Param& params, const State& states) {
+State ode_val(const Param params, const State states) {
     return {
         params[0] * states[0] - params[1] * states[0] * states[1],
         params[2] * states[0] * states[1] - params[3] * states[1]
