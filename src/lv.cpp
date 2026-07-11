@@ -3,6 +3,7 @@
 #include <array>
 #include <random>
 #include <chrono>
+#include <omp.h>
 
 using State = std::array<double, 2>;
 using Param = std::array<double, 4>;
@@ -62,24 +63,25 @@ void solve_ode(double t0, double t_end, State& states, double h, const Param& pa
 
 //     constexpr double t0 = 0.0;
 //     constexpr double t_end = 10.0;
-//     constexpr double h = 0.001;
+//     constexpr double h = 0.1;
 
 //     solve_ode(t0, t_end, states, h, params);
 
-//     std::cout << "End values\nx: " << std::fixed << std::setprecision(2) << states[0] << "\ny: " << states[1] << "\n";
+//     std::cout << "End values\nx: " << std::fixed << std::setprecision(4) << states[0] << "\ny: " << states[1] << "\n";
 
 //     return 0;
 // }
 
 int main() {
-    constexpr size_t samples = 1 << 12;
+    auto start_total = std::chrono::steady_clock::now();
+    constexpr size_t samples = 1 << 20;
     constexpr int numParams = 4;
 
     constexpr Param params = {1.0, 0.1, 0.075, 1.5};
 
     constexpr double t0 = 0.0;
     constexpr double t_end = 10.0;
-    constexpr double h = 0.001;
+    constexpr double h = 0.1;
 
     Param low_params, high_params;
 
@@ -89,28 +91,25 @@ int main() {
     }
 
     // allocate memory for parameter sets
-    std::array<double, samples * numParams> param_set;
+    std::vector<double> param_set(samples * numParams);
 
     // generate uniform random numbers between 0 and 1
     std::random_device rd;
     std::mt19937 gen(rd());
     std::uniform_real_distribution<double> dist(0.0, 1.0);
 
-    for (size_t i = 0; i < samples * numParams; i++) {
-        param_set[i] = dist(gen);
-    }
-
-    // scale uniform numbers to parameters
-    for (int i = 0; i < numParams; i++) {
-        for (size_t j = 0; j < samples; j++) {
-            param_set[i + j * numParams] = (0.85 + 0.3 * param_set[i + j * numParams]) * params[i];
+    #pragma omp parallel for
+    for (size_t i = 0; i < samples; i++) {
+        for (int j = 0; j < numParams; j++) {
+            param_set[i * numParams + j] = (0.85 + 0.3 * dist(gen)) * params[j];
         }
     }
 
     // solve odes for each parameter set
-    std::array<double, 2 * samples> results;
+    std::vector<double> results(2 * samples);
 
-    auto start = std::chrono::steady_clock::now();
+    auto start_sim = std::chrono::steady_clock::now();
+    #pragma omp parallel for
     for (size_t i = 0; i < samples; i++) {
         Param temp_params = {param_set[i * numParams], 
             param_set[i * numParams + 1], 
@@ -124,17 +123,14 @@ int main() {
         results[i * 2] = temp_state[0];
         results[i * 2 + 1] = temp_state[1];
     }
-    auto end = std::chrono::steady_clock::now();
-    auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+    auto end_sim = std::chrono::steady_clock::now();
+    auto elapsed_sim = std::chrono::duration_cast<std::chrono::milliseconds>(end_sim - start_sim);
 
-    // output
-    for (int i = 0; i < 20; i += 2) {
-        std::cout << "Result " << i / 2 << "\nx: " << std::fixed << std::setprecision(2)
-                  << results[i] << "\ny: " << results[i + 1] << "\n";
-    }
+    auto end_total = std::chrono::steady_clock::now();
+    auto elapsed_total = std::chrono::duration_cast<std::chrono::milliseconds>(end_total - start_total);
 
-    std::cout << "Simulation time: " << elapsed_ms.count() << " ms\n";
-    std::cout << "Simulations per second: " << static_cast<int>(samples / static_cast<double>(elapsed_ms.count()) * 1000.0) << "\n";
+    std::cout << "Simulation time: " << elapsed_sim.count() << " ms\n";
+    std::cout << "Total time: " << elapsed_total.count() << " ms\n";
 
 
     return 0;
