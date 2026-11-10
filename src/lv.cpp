@@ -41,11 +41,9 @@ int main() {
     constexpr double t_end = 10.0;
     constexpr double h = 0.1;
 
-
-    // allocate memory for parameter sets
+    // Generate 2**20 random parameters within +-15% of the default values 
     std::vector<double> param_set(samples * numParams);
 
-    // generate uniform random numbers between 0 and 1
     std::random_device rd;
     std::mt19937 gen(rd());
     std::uniform_real_distribution<double> dist(0.0, 1.0);
@@ -57,10 +55,14 @@ int main() {
         }
     }
 
-    // solve odes for each parameter set
+    auto end_params = std::chrono::steady_clock::now();
+    auto elapsed_params = std::chrono::duration_cast<std::chrono::milliseconds>(end_params - start_total);
+
+    // Solve ODE system for each parameter set
+    auto start_sim = std::chrono::steady_clock::now();
+
     std::vector<double> results(2 * samples);
 
-    auto start_sim = std::chrono::steady_clock::now();
     #pragma omp parallel for
     for (size_t i = 0; i < samples; i++) {
         Param temp_params = {param_set[i * numParams], 
@@ -81,6 +83,7 @@ int main() {
     auto end_total = std::chrono::steady_clock::now();
     auto elapsed_total = std::chrono::duration_cast<std::chrono::milliseconds>(end_total - start_total);
 
+    std::cout << "Parameter generation time: " << elapsed_params.count() << " ms\n";
     std::cout << "Simulation time: " << elapsed_sim.count() << " ms\n";
     std::cout << "Total time: " << elapsed_total.count() << " ms\n";
 
