@@ -2,7 +2,7 @@
 
 TARGET 	 = build/lv
 CXX 	 = g++
-LD 	 = g++
+LD 	     = g++
 CXXFLAGS = -O3 -march=native -Wall -Wextra -fopenmp
 OBJS     = obj/lv.o
 
