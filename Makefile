@@ -16,4 +16,4 @@ obj/%.o: src/%.cpp
 	$(CXX) -c $(CXXFLAGS) $< -o $@
 
 clean:
-	rm -f $(TARGET) obj/%.o
+	rm -f $(TARGET) obj/*.o
