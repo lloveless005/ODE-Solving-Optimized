@@ -10,15 +10,14 @@ using Param = std::array<double, 4>;
 
 // Lotka-Volterra Model
 // dx/dt = ax - bxy
-// dy/dt = dxy - gy
+// dy/dt = cxy - dy
 
-// Parameters: a, b, d, g
+// Parameters: a, b, c, d
 // Variables: x, y
 
 // Example parameters: {1.0, 0.1, 0.075, 1.5}
 // Example initial conditions: {10, 5}
 
-// 1. ODE
 
 State ode_val(const Param params, const State states) {
     return {
@@ -27,50 +26,9 @@ State ode_val(const Param params, const State states) {
     };
 }
 
-// 2. Runge-Kutta solver
 
-void solve_ode(double t0, double t_end, State& states, double h, const Param& params) {
-    double t = t0;
+void solve_ode(double t0, double t_end, State& states, double h, const Param& params);
 
-    while (t < t_end) {
-        if (t + h > t_end) {
-            h = t_end - t;
-        }
-
-        // Runge-Kutta 4th order solver
-        State k1 = ode_val(params, states);
-
-        State tempstates = {states[0] + (h * k1[0]) / 2.0, states[1] + (h * k1[1]) / 2.0};
-        State k2 = ode_val(params, tempstates);
-
-        tempstates = {states[0] + (h * k2[0]) / 2.0, states[1] + (h * k2[1]) / 2.0};
-        State k3 = ode_val(params, tempstates);
-
-        tempstates = {states[0] + (h * k3[0]), states[1] + (h * k3[1])};
-        State k4 = ode_val(params, tempstates);
-
-        states[0] += (k1[0] + 2.0 * k2[0] + 2.0 * k3[0] + k4[0]) * (h / 6.0);
-        states[1] += (k1[1] + 2.0 * k2[1] + 2.0 * k3[1] + k4[1]) * (h / 6.0);
-        t += h;
-    }
-}
-
-// Main
-
-// int main() {
-//     constexpr Param params = {1.0, 0.1, 0.075, 1.5};
-//     State states = {10.0, 5.0};
-
-//     constexpr double t0 = 0.0;
-//     constexpr double t_end = 10.0;
-//     constexpr double h = 0.1;
-
-//     solve_ode(t0, t_end, states, h, params);
-
-//     std::cout << "End values\nx: " << std::fixed << std::setprecision(4) << states[0] << "\ny: " << states[1] << "\n";
-
-//     return 0;
-// }
 
 int main() {
     auto start_total = std::chrono::steady_clock::now();
@@ -134,4 +92,32 @@ int main() {
 
 
     return 0;
+}
+
+
+
+void solve_ode(double t0, double t_end, State& states, double h, const Param& params) {
+    double t = t0;
+
+    while (t < t_end) {
+        if (t + h > t_end) {
+            h = t_end - t;
+        }
+
+        // Runge-Kutta 4th order solver
+        State k1 = ode_val(params, states);
+
+        State tempstates = {states[0] + (h * k1[0]) / 2.0, states[1] + (h * k1[1]) / 2.0};
+        State k2 = ode_val(params, tempstates);
+
+        tempstates = {states[0] + (h * k2[0]) / 2.0, states[1] + (h * k2[1]) / 2.0};
+        State k3 = ode_val(params, tempstates);
+
+        tempstates = {states[0] + (h * k3[0]), states[1] + (h * k3[1])};
+        State k4 = ode_val(params, tempstates);
+
+        states[0] += (k1[0] + 2.0 * k2[0] + 2.0 * k3[0] + k4[0]) * (h / 6.0);
+        states[1] += (k1[1] + 2.0 * k2[1] + 2.0 * k3[1] + k4[1]) * (h / 6.0);
+        t += h;
+    }
 }
