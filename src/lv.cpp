@@ -41,12 +41,6 @@ int main() {
     constexpr double t_end = 10.0;
     constexpr double h = 0.1;
 
-    Param low_params, high_params;
-
-    for (int i = 0; i < numParams; i++) {
-        low_params[i] = params[i] * 0.85;
-        high_params[i] = params[i] * 1.15;
-    }
 
     // allocate memory for parameter sets
     std::vector<double> param_set(samples * numParams);
