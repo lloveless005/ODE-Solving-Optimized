@@ -1,19 +1,24 @@
 .PHONY: all clean
 
-TARGET 	 = build/lv
 CXX 	 = g++
 LD 	     = g++
 CXXFLAGS = -O3 -march=native -Wall -Wextra -fopenmp
 LDFLAGS  = -fopenmp
-OBJS     = obj/lv.o
+OBJ_DIR  = obj
+BIN_DIR  = build
+OBJS     = $(OBJ_DIR)/lv.o
+TARGET 	 = $(BIN_DIR)/lv
 
 all: $(TARGET)
 
-$(TARGET): $(OBJS)
+$(TARGET): $(OBJS) | $(BIN_DIR)
 	$(LD) $(LDFLAGS) $^ -o $@
 
-obj/%.o: src/%.cpp
+$(OBJ_DIR)/%.o: src/%.cpp | $(OBJ_DIR)
 	$(CXX) -c $(CXXFLAGS) $< -o $@
 
 clean:
-	rm -f $(TARGET) obj/*.o
+	rm -rf $(OBJ_DIR) $(BIN_DIR)
+
+$(OBJ_DIR) $(BIN_DIR):
+	mkdir -p $@
