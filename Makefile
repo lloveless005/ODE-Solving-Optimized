@@ -23,10 +23,10 @@ $(OBJ_DIR)/%.o: src/%.cpp | $(OBJ_DIR)
 
 gpu: $(TARGET_GPU)
 
-$(TARGET_GPU): $(OBJ_DIR)/lv-gpu.o | $(OBJ_DIR)
+$(TARGET_GPU): $(OBJ_DIR)/lv-gpu.o | $(BIN_DIR)
 	$(NVCC) $< -o $@
 
-$(OBJ_DIR)/lv-gpu.o: $(SRC_DIR)/lv-gpu.cu
+$(OBJ_DIR)/lv-gpu.o: $(SRC_DIR)/lv-gpu.cu | $(OBJ_DIR)
 	$(NVCC) -c $(NVCCFLAGS) $< -o $@
 
 clean:
