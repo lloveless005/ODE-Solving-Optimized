@@ -26,7 +26,7 @@ State ode_val(const Param params, const State states);
 void solve_ode(double t0, double t_end, State& states, double h, const Param& params);
 
 
-int main(int argc, char *argv[]) {
+int main(int, char *argv[]) {
     int errorStatus = 0;
     if (stoi(argv[1]) > 24) errorStatus = 1;    // Limit the sample size to a reasonable amount 
     else {
