@@ -3,6 +3,7 @@
 #include <iostream>
 #include <cuda/std/array>
 #include <string>
+#include <vector>
 
 using namespace std;
 
@@ -25,6 +26,21 @@ int main(int argc, char *argv[]) {
     if (argc < 2) errorStatus = 1;
     else if (stoi(argv[1]) > 24) errorStatus = 2;
     else {
+        size_t samples = 1 << stoi(argv[1]);
+
+        constexpr double t0 = 0.0;
+        constexpr double t_end = 10.0;
+        constexpr double h = 0.1;
+
+        vector<double>* param_set = new vector<double>(samples * num_params);
+
+
+        // todo: copy param_set to gpu
+        // todo: random parameter generation on GPU
+
+        // Allocate memory for results directly on GPU (skip PCIe transfer)
+        double* results = nullptr;
+        cudaMalloc(&results, 2 * samples * sizeof(double));
 
     }
 
@@ -32,7 +48,7 @@ int main(int argc, char *argv[]) {
 }
 
 
-__global__ void SolveGPU(State results[], const int samples, 
+__global__ void SolveGPU(double* results, const int samples, 
                         const double t0, const double t_end, const double h, const Param param_set[]) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i < samples) {
@@ -40,7 +56,8 @@ __global__ void SolveGPU(State results[], const int samples,
         Param temp_params = param_set[i];
 
         solve_ode(t0, t_end, temp_state, h, temp_params);
-        results[i] = temp_state;
+        results[i * 2] = temp_state[0];
+        results[i * 2 + 1] = temp_state[1];
     }
 }
 
