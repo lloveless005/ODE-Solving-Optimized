@@ -87,6 +87,11 @@ int main(int argc, char *argv[]) {
         cout << "Simulation time: " << elapsed_sim.count() << " ms\n";
         cout << "Total time: " << elapsed_total.count() << " ms\n";
 
+        cout << "Sample end states: " << endl;
+        for (int idx = 0; idx < 5; idx++) {
+            cout << results[idx * 2] << " " << results[idx * 2 + 1] << endl;
+        }
+
     }
 
     return errorStatus;
