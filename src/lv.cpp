@@ -21,37 +21,41 @@ using State = array<double, 2>;
 using Param = array<double, 4>;
 
 
-State ode_val(const Param params, const State states);
+State ode_val(const Param& params, const State& in_state);
 
-void solve_ode(double t0, double t_end, State& states, double h, const Param& params);
+void solve_ode(double t0, double t_end, State& in_state, double h, const Param& params);
 
 
 int main(int argc, char *argv[]) {
-    int errorStatus = 0;
-    if (argc < 2) errorStatus = 1;
-    else if (stoi(argv[1]) > 24) errorStatus = 2;    // Limit the sample size to a reasonable amount 
+    int error_status = 0;
+    if (argc < 2) error_status = 1;
+    else if (stoi(argv[1]) > 24) error_status = 2;    // Limit the sample size to a reasonable amount 
     else {
         auto start_total = chrono::steady_clock::now();
         size_t samples = 1 << stoi(argv[1]);
-        constexpr int numParams = 4;
+        constexpr int num_params = 4;
 
-        constexpr Param defaultParams = {1.0, 0.1, 0.075, 1.5};
+        constexpr Param default_params = {1.0, 0.1, 0.075, 1.5};
 
         constexpr double t0 = 0.0;
         constexpr double t_end = 10.0;
         constexpr double h = 0.1;
 
         // Generate 2**20 random parameters within +-15% of the default values 
-        vector<double> param_set(samples * numParams);
+        vector<double> param_set(samples * num_params);
 
-        random_device rd;
-        mt19937 gen(rd());
-        uniform_real_distribution<double> dist(0.0, 1.0);
 
-        #pragma omp parallel for
-        for (size_t i = 0; i < samples; i++) {
-            for (int j = 0; j < numParams; j++) {
-                param_set[i * numParams + j] = (0.85 + 0.3 * dist(gen)) * defaultParams[j];
+        #pragma omp parallel
+        {
+            int tid = omp_get_thread_num();
+            mt19937 gen(1337 + tid);
+            uniform_real_distribution<double> dist(0.0, 1.0);
+
+            #pragma omp for
+            for (size_t i = 0; i < samples; i++) {
+                for (int j = 0; j < num_params; j++) {
+                    param_set[i * num_params + j] = (0.85 + 0.3 * dist(gen)) * default_params[j];
+                }
             }
         }
 
@@ -65,10 +69,10 @@ int main(int argc, char *argv[]) {
 
         #pragma omp parallel for
         for (size_t i = 0; i < samples; i++) {
-            Param temp_params = {param_set[i * numParams], 
-                param_set[i * numParams + 1], 
-                param_set[i * numParams + 2],
-                param_set[i * numParams + 3]
+            Param temp_params = {param_set[i * num_params], 
+                param_set[i * num_params + 1], 
+                param_set[i * num_params + 2],
+                param_set[i * num_params + 3]
             };
 
             State temp_state = {10.0, 5.0};
@@ -94,18 +98,18 @@ int main(int argc, char *argv[]) {
 
     }
 
-    return errorStatus;
+    return error_status;
 }
 
 
-State ode_val(const Param params, const State states) {
+State ode_val(const Param& params, const State& in_state) {
     return {
-        params[0] * states[0] - params[1] * states[0] * states[1],
-        params[2] * states[0] * states[1] - params[3] * states[1]
+        params[0] * in_state[0] - params[1] * in_state[0] * in_state[1],
+        params[2] * in_state[0] * in_state[1] - params[3] * in_state[1]
     };
 }
 
-void solve_ode(double t0, double t_end, State& states, double h, const Param& params) {
+void solve_ode(double t0, double t_end, State& in_state, double h, const Param& params) {
     double t = t0;
 
     while (t < t_end) {
@@ -114,19 +118,19 @@ void solve_ode(double t0, double t_end, State& states, double h, const Param& pa
         }
 
         // Runge-Kutta 4th order solver
-        State k1 = ode_val(params, states);
+        State k1 = ode_val(params, in_state);
 
-        State tempstates = {states[0] + (h * k1[0]) / 2.0, states[1] + (h * k1[1]) / 2.0};
-        State k2 = ode_val(params, tempstates);
+        State temp_states = {in_state[0] + (h * k1[0]) / 2.0, in_state[1] + (h * k1[1]) / 2.0};
+        State k2 = ode_val(params, temp_states);
 
-        tempstates = {states[0] + (h * k2[0]) / 2.0, states[1] + (h * k2[1]) / 2.0};
-        State k3 = ode_val(params, tempstates);
+        temp_states = {in_state[0] + (h * k2[0]) / 2.0, in_state[1] + (h * k2[1]) / 2.0};
+        State k3 = ode_val(params, temp_states);
 
-        tempstates = {states[0] + (h * k3[0]), states[1] + (h * k3[1])};
-        State k4 = ode_val(params, tempstates);
+        temp_states = {in_state[0] + (h * k3[0]), in_state[1] + (h * k3[1])};
+        State k4 = ode_val(params, temp_states);
 
-        states[0] += (k1[0] + 2.0 * k2[0] + 2.0 * k3[0] + k4[0]) * (h / 6.0);
-        states[1] += (k1[1] + 2.0 * k2[1] + 2.0 * k3[1] + k4[1]) * (h / 6.0);
+        in_state[0] += (k1[0] + 2.0 * k2[0] + 2.0 * k3[0] + k4[0]) * (h / 6.0);
+        in_state[1] += (k1[1] + 2.0 * k2[1] + 2.0 * k3[1] + k4[1]) * (h / 6.0);
         t += h;
     }
 }
