@@ -12,6 +12,13 @@ using Param = cuda::std::array<double, 4>;
 
 #define num_params 4
 
+#define cudaCheckError() { \
+    cudaError_t e = cudaGetLastError(); \
+    if (e != cudaSuccess) { \
+        printf("CUDA failure %s:%d: '%s'\n",__FILE__,__LINE__,cudaGetErrorString(e)); \
+    } \
+}
+
 
 __global__ void SolveGPU(State results[], const int samples, 
                         const double t0, const double t_end, const double h, const Param param_set[]);
@@ -23,8 +30,14 @@ __device__ void solve_ode(double t0, double t_end, State &inState, double h, con
 
 int main(int argc, char *argv[]) {
     int errorStatus = 0;
-    if (argc < 2) errorStatus = 1;
-    else if (stoi(argv[1]) > 24) errorStatus = 2;
+    if (argc < 2) {
+        cout << "Must pass one argument indicating sample size." << endl;
+        errorStatus = 1;
+    }
+    else if (stoi(argv[1]) > 24) {
+        cout << "Must pass an int between 0 and 24." << endl;
+        errorStatus = 2;
+    }
     else {
         size_t samples = 1 << stoi(argv[1]);
 
@@ -40,7 +53,7 @@ int main(int argc, char *argv[]) {
 
         // Allocate memory for results directly on GPU (skip PCIe transfer)
         double* results = nullptr;
-        cudaMalloc(&results, 2 * samples * sizeof(double));
+        cudaCheckError(cudaMalloc(&results, 2 * samples * sizeof(double)));
 
     }
 
