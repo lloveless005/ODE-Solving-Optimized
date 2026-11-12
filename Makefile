@@ -9,17 +9,25 @@ LDFLAGS     = -fopenmp
 SRC_DIR     = src
 OBJ_DIR     = obj
 BIN_DIR     = build
-OBJS        = $(OBJ_DIR)/lv.o
 TARGET 	    = $(BIN_DIR)/lv
+TARGET_NF   = $(BIN_DIR)/lv-nf
 TARGET_GPU  = $(BIN_DIR)/lv-cu
 
 all: $(TARGET)
 
-$(TARGET): $(OBJS) | $(BIN_DIR)
+$(TARGET): $(OBJ_DIR)/lv.o | $(BIN_DIR)
 	$(LD) $(LDFLAGS) $^ -o $@
 
-$(OBJ_DIR)/%.o: src/%.cpp | $(OBJ_DIR)
+$(OBJ_DIR)/lv.o: $(SRC_DIR)/lv.cpp | $(OBJ_DIR)
 	$(CXX) -c $(CXXFLAGS) $< -o $@
+
+noflags: $(TARGET_NF)
+
+$(TARGET_NF): $(OBJ_DIR)/lv-nf.o | $(BIN_DIR)
+	$(LD) $(LDFLAGS) $^ -o $@
+
+$(OBJ_DIR)/lv-nf.o: $(SRC_DIR)/lv.cpp | $(OBJ_DIR)
+	$(CXX) -c -Wall -Wextra -fopenmp $< -o $@
 
 gpu: $(TARGET_GPU)
 
