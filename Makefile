@@ -4,7 +4,7 @@ CXX 	    = g++
 LD 	        = g++
 NVCC        = nvcc
 CXXFLAGS    = -O3 -march=native -Wall -Wextra -fopenmp
-NVCCFLAGS   = -O3 -arch=sm_120
+NVCCFLAGS   = -O3 -arch=native
 LDFLAGS     = -fopenmp
 SRC_DIR     = src
 OBJ_DIR     = obj
@@ -32,7 +32,7 @@ $(OBJ_DIR)/lv-nf.o: $(SRC_DIR)/lv.cpp | $(OBJ_DIR)
 gpu: $(TARGET_GPU)
 
 $(TARGET_GPU): $(OBJ_DIR)/lv-gpu.o | $(BIN_DIR)
-	$(NVCC) $< -o $@
+	$(NVCC) -lcurand $< -o $@
 
 $(OBJ_DIR)/lv-gpu.o: $(SRC_DIR)/lv-gpu.cu | $(OBJ_DIR)
 	$(NVCC) -c $(NVCCFLAGS) $< -o $@
