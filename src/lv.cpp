@@ -26,76 +26,70 @@ State ode_val(const Param& params, const State& in_state);
 void solve_ode(double t0, double t_end, State& in_state, double h, const Param& params);
 
 
-int main(int argc, char *argv[]) {
-    int error_status = 0;
-    if (argc < 2) error_status = 1;
-    else if (stoi(argv[1]) > 24) error_status = 2;    // Limit the sample size to a reasonable amount 
-    else {
-        auto start_total = chrono::steady_clock::now();
-        size_t samples = 1 << stoi(argv[1]);
-        constexpr int num_params = 4;
+int main() {
+    auto start_total = chrono::steady_clock::now();
+    size_t samples = 1 << stoi(argv[1]);
+    constexpr int num_params = 4;
 
-        constexpr Param default_params = {1.0, 0.1, 0.075, 1.5};
+    constexpr Param default_params = {1.0, 0.1, 0.075, 1.5};
 
-        constexpr double t0 = 0.0;
-        constexpr double t_end = 10.0;
-        constexpr double h = 0.1;
+    constexpr double t0 = 0.0;
+    constexpr double t_end = 10.0;
+    constexpr double h = 0.1;
 
-        // Generate 2**20 random parameters within +-15% of the default values 
-        vector<double> param_set(samples * num_params);
+    // Generate 2**20 random parameters within +-15% of the default values 
+    vector<double> param_set(samples * num_params);
 
 
-        #pragma omp parallel
-        {
-            int tid = omp_get_thread_num();
-            mt19937 gen(1337 + tid);
-            uniform_real_distribution<double> dist(0.0, 1.0);
+    #pragma omp parallel
+    {
+        int tid = omp_get_thread_num();
+        mt19937 gen(1337 + tid);
+        uniform_real_distribution<double> dist(0.0, 1.0);
 
-            #pragma omp for
-            for (size_t i = 0; i < samples; i++) {
-                for (int j = 0; j < num_params; j++) {
-                    param_set[i * num_params + j] = (0.85 + 0.3 * dist(gen)) * default_params[j];
-                }
+        #pragma omp for
+        for (size_t i = 0; i < samples; i++) {
+            for (int j = 0; j < num_params; j++) {
+                param_set[i * num_params + j] = (0.85 + 0.3 * dist(gen)) * default_params[j];
             }
         }
+    }
 
-        auto end_params = chrono::steady_clock::now();
-        auto elapsed_params = chrono::duration_cast<chrono::milliseconds>(end_params - start_total);
+    auto end_params = chrono::steady_clock::now();
+    auto elapsed_params = chrono::duration_cast<chrono::milliseconds>(end_params - start_total);
 
-        // Solve ODE system for each parameter set
-        auto start_sim = chrono::steady_clock::now();
+    // Solve ODE system for each parameter set
+    auto start_sim = chrono::steady_clock::now();
 
-        vector<double> results(2 * samples);
+    vector<double> results(2 * samples);
 
-        #pragma omp parallel for
-        for (size_t i = 0; i < samples; i++) {
-            Param temp_params = {param_set[i * num_params], 
-                param_set[i * num_params + 1], 
-                param_set[i * num_params + 2],
-                param_set[i * num_params + 3]
-            };
+    #pragma omp parallel for
+    for (size_t i = 0; i < samples; i++) {
+        Param temp_params = {param_set[i * num_params], 
+            param_set[i * num_params + 1], 
+            param_set[i * num_params + 2],
+            param_set[i * num_params + 3]
+        };
 
-            State temp_state = {10.0, 5.0};
-            solve_ode(t0, t_end, temp_state, h, temp_params);
+        State temp_state = {10.0, 5.0};
+        solve_ode(t0, t_end, temp_state, h, temp_params);
 
-            results[i * 2] = temp_state[0];
-            results[i * 2 + 1] = temp_state[1];
-        }
-        auto end_sim = chrono::steady_clock::now();
-        auto elapsed_sim = chrono::duration_cast<chrono::milliseconds>(end_sim - start_sim);
+        results[i * 2] = temp_state[0];
+        results[i * 2 + 1] = temp_state[1];
+    }
+    auto end_sim = chrono::steady_clock::now();
+    auto elapsed_sim = chrono::duration_cast<chrono::milliseconds>(end_sim - start_sim);
 
-        auto end_total = chrono::steady_clock::now();
-        auto elapsed_total = chrono::duration_cast<chrono::milliseconds>(end_total - start_total);
+    auto end_total = chrono::steady_clock::now();
+    auto elapsed_total = chrono::duration_cast<chrono::milliseconds>(end_total - start_total);
 
-        cout << "Parameter generation time: " << elapsed_params.count() << " ms\n";
-        cout << "Simulation time: " << elapsed_sim.count() << " ms\n";
-        cout << "Total time: " << elapsed_total.count() << " ms\n";
+    cout << "Parameter generation time: " << elapsed_params.count() << " ms\n";
+    cout << "Simulation time: " << elapsed_sim.count() << " ms\n";
+    cout << "Total time: " << elapsed_total.count() << " ms\n";
 
-        cout << "Sample end states: " << endl;
-        for (int idx = 0; idx < 5; idx++) {
-            cout << results[idx * 2] << " " << results[idx * 2 + 1] << endl;
-        }
-
+    cout << "Sample end states: " << endl;
+    for (int idx = 0; idx < 5; idx++) {
+        cout << results[idx * 2] << " " << results[idx * 2 + 1] << endl;
     }
 
     return error_status;
