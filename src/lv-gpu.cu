@@ -1,5 +1,6 @@
-#include "cuda_runtime.h"
-#include "device_launch_parameters.h"
+#include <cuda_runtime.h>
+#include <device_launch_parameters.h>
+#include <curand.h>
 #include <iostream>
 #include <cuda/std/array>
 #include <string>
@@ -10,67 +11,103 @@ using namespace std;
 using State = cuda::std::array<double, 2>;
 using Param = cuda::std::array<double, 4>;
 
-#define num_params 4
+#define NUM_PARAMS 4
+#define SAMPLES (1 << 20)
+#define DEFAULT_PARAMS cuda::std::array<double, 4>{1.0, 0.1, 0.075, 1.5}
 
-#define cudaCheckError() { \
-    cudaError_t e = cudaGetLastError(); \
+#define THREADS 256
+
+#define cudaCheckError(call) { \
+    cudaError_t e = call; \
     if (e != cudaSuccess) { \
-        printf("CUDA failure %s:%d: '%s'\n",__FILE__,__LINE__,cudaGetErrorString(e)); \
+        fprintf(stderr, "CUDA failure %s:%d: '%s'\n", __FILE__, __LINE__, cudaGetErrorString(e)); \
+    } \
+}
+
+#define curandCheckError(call) { \
+    curandStatus_t e = call; \
+    if (e != CURAND_STATUS_SUCCESS) { \
+        fprintf(stderr, "CURAND failure %d at %s:%d\n", e, __FILE__, __LINE__); \
     } \
 }
 
 
-__global__ void SolveGPU(State results[], const int samples, 
-                        const double t0, const double t_end, const double h, const Param param_set[]);
 
-__device__ State ode_val(const Param &params, const State &nState);
+
+__global__ void SolveGPU(cuda::std::array<double, 2 * SAMPLES>* results, 
+                        const double t0, 
+                        const double t_end, 
+                        const double h, 
+                        const cuda::std::array<double, SAMPLES * NUM_PARAMS> param_set);
+
+__global__ void GenerateParameters(double* param_set, const int size);
+
+__device__ State ode_val(const Param &params, const State &inState);
 
 __device__ void solve_ode(double t0, double t_end, State &inState, double h, const Param &inParams);
 
 
-int main(int argc, char *argv[]) {
+int main() {
     int errorStatus = 0;
-    if (argc < 2) {
-        cout << "Must pass one argument indicating sample size." << endl;
-        errorStatus = 1;
-    }
-    else if (stoi(argv[1]) > 24) {
-        cout << "Must pass an int between 0 and 24." << endl;
-        errorStatus = 2;
-    }
-    else {
-        size_t samples = 1 << stoi(argv[1]);
 
-        constexpr double t0 = 0.0;
-        constexpr double t_end = 10.0;
-        constexpr double h = 0.1;
+    constexpr double t0 = 0.0;
+    constexpr double t_end = 10.0;
+    constexpr double h = 0.1;
 
-        vector<double>* param_set = new vector<double>(samples * num_params);
+    // Allocate arrays on GPU
+    cuda::std::array<double, SAMPLES * NUM_PARAMS>* param_set = nullptr;        cudaCheckError(cudaMalloc(&param_set, SAMPLES * sizeof(Param)));
 
+    cuda::std::array<double, 2 * SAMPLES>* results = nullptr;
+    cudaCheckError(cudaMalloc(&results, SAMPLES * sizeof(State)));
 
-        // todo: copy param_set to gpu
-        // todo: random parameter generation on GPU
+    // Fill param_set array with random uniform doubles
 
-        // Allocate memory for results directly on GPU (skip PCIe transfer)
-        double* results = nullptr;
-        cudaCheckError(cudaMalloc(&results, 2 * samples * sizeof(double)));
+    curandGenerator_t gen;
+    curandCheckError(curandCreateGenerator(&gen, CURAND_RNG_PSEUDO_PHILOX4_32_10));
+    curandCheckError(curandSetPseudoRandomGeneratorSeed(gen, 1337ULL));
 
-    }
+    curandCheckError(curandGenerateUniformDouble(gen, param_set->data(), SAMPLES * NUM_PARAMS));
+
+    // Use random uniform values to make varied parameter sets
+
+    int blocksGen = (SAMPLES * NUM_PARAMS + THREADS - 1) / THREADS;
+    GenerateParameters<<<blocksGen, THREADS>>>(param_set->data(), SAMPLES * NUM_PARAMS);
+
+    // todo: solve ODEs for random parameter sets
+    // todo: copy results array to host
+
+    cudaCheckError(cudaFree(param_set));
+    cudaCheckError(cudaFree(results));
 
     return errorStatus;
 }
 
 
-__global__ void SolveGPU(double* results, const int samples, 
-                        const double t0, const double t_end, const double h, const Param param_set[]) {
+__global__ void SolveGPU(double* results,  
+                        const double t0, 
+                        const double t_end, 
+                        const double h, 
+                        const double* param_set) 
+{
     int i = blockIdx.x * blockDim.x + threadIdx.x;
-    if (i < samples) {
+    if (i < SAMPLES) {
         State temp_state = {10.0, 5.0};
-        Param temp_params = param_set[i];
+        Param temp_params;
+        for (int idx = 0; idx < NUM_PARAMS; idx++) {
+            temp_params[idx] = param_set[i * NUM_PARAMS + idx];
+        }
 
         solve_ode(t0, t_end, temp_state, h, temp_params);
+
         results[i * 2] = temp_state[0];
         results[i * 2 + 1] = temp_state[1];
+    }
+}
+
+__global__ void GenerateParameters(double* param_set, const int size) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < SAMPLES * NUM_PARAMS) {
+        param_set[i] = (0.85 + 0.3 * param_set[i]) * DEFAULT_PARAMS[i % 4];
     }
 }
 
