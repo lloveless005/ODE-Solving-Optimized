@@ -4,8 +4,10 @@
 #include <random>
 #include <format>
 #include <chrono>
+#include <vector>
 
-#define FILE_NAME "input/standard-parameters.txt"
+#define FILE_NAME_FP64 "input/standard-parameters-fp64.txt"
+#define FILE_NAME_FP32 "input/standard-parameters-fp32.txt"
 #define NUM_PARAMS 4
 constexpr int SAMPLES = 1 << 20;
 
@@ -16,16 +18,27 @@ int main() {
     int error_status = 0;
 
     // initialize output file stream
-    ofstream outputFile;
-    outputFile.open(FILE_NAME);
+    ofstream outputFile64;
+    outputFile64.open(FILE_NAME_FP64);
 
-    double* param_set= new double[SAMPLES * NUM_PARAMS];
-    constexpr double default_params[] = {1.0, 0.1, 0.075, 1.5};
+    ofstream outputFile32;
+    outputFile32.open(FILE_NAME_FP32);
 
-    if (!outputFile.is_open()) {
+    vector<double> param_set_fp64(SAMPLES * NUM_PARAMS);
+    constexpr double default_params_fp64[] = {1.0, 0.1, 0.075, 1.5};
 
-        cout << "Could not open " << FILE_NAME << endl;
+    vector<float> param_set_fp32(SAMPLES * NUM_PARAMS);
+
+
+    if (!outputFile64.is_open()) {
+
+        cout << "Could not open " << FILE_NAME_FP64 << endl;
         error_status = 1;
+
+    } else if (!outputFile32.is_open()) {
+
+        cout << "Could not open " << FILE_NAME_FP32 << endl;
+        error_status = 2;
 
     } else {
 
@@ -41,7 +54,7 @@ int main() {
             #pragma omp for
             for (size_t i = 0; i < SAMPLES; i++) {
                 for (int j = 0; j < NUM_PARAMS; j++) {
-                    param_set[i * NUM_PARAMS + j] = (0.85 + 0.3 * dist(gen)) * default_params[j];
+                    param_set_fp64[i * NUM_PARAMS + j] = (0.85 + 0.3 * dist(gen)) * default_params_fp64[j];
                 }
             }
         }
@@ -52,17 +65,23 @@ int main() {
 
         auto start_write = chrono::steady_clock::now();
 
+        // write FP64 parameter set as binary to output file
+        outputFile64.write(reinterpret_cast<const char*>(param_set_fp64.data()), param_set_fp64.size() * sizeof(double));
+
+        #pragma omp parallel for 
         for (int idx = 0; idx < SAMPLES * NUM_PARAMS; idx++) {
-            outputFile << format("{}\n", param_set[idx]);
+            param_set_fp32[idx] = static_cast<float>(param_set_fp64[idx]);
         }
+
+        outputFile32.write(reinterpret_cast<const char*>(param_set_fp32.data()), param_set_fp32.size() * sizeof(float));
 
         auto end_write = chrono::steady_clock::now();
         auto elapsed_write = chrono::duration_cast<chrono::milliseconds>(end_write - start_write);
         cout << "File write time: " << elapsed_write.count() << " ms" << endl;
     }
 
-    delete [] param_set;
-    outputFile.close();
+    outputFile64.close();
+    outputFile32.close();
 
     auto end_total = chrono::steady_clock::now();
     auto elapsed_total = chrono::duration_cast<chrono::milliseconds>(end_total - start_total);
