@@ -53,7 +53,7 @@ int main() {
         auto start_write = chrono::steady_clock::now();
 
         for (int idx = 0; idx < SAMPLES * NUM_PARAMS; idx++) {
-            outputFile << format("{}", param_set[idx]) << endl;
+            outputFile << format("{}\n", param_set[idx]);
         }
 
         auto end_write = chrono::steady_clock::now();
