@@ -4,6 +4,7 @@
 #include <random>
 #include <chrono>
 #include <omp.h>
+#include <fstream>
 
 // Lotka-Volterra Model
 // dx/dt = ax - bxy
@@ -22,6 +23,9 @@ using Param = array<double, 4>;
 
 #define NUM_PARAMS 4
 #define SAMPLES (1 << 20)
+
+#define INPUT_FILE "input/standard-parameters.txt"
+constexpr bool use_input_file = true;
 
 
 State ode_val(const Param& params, const State& in_state);
@@ -43,19 +47,42 @@ int main() {
     // Generate 2**20 random parameters within +-15% of the default values 
     vector<double> param_set(SAMPLES * NUM_PARAMS);
 
+    if (use_input_file) {
 
-    #pragma omp parallel
-    {
-        int tid = omp_get_thread_num();
-        mt19937 gen(1337 + tid);
-        uniform_real_distribution<double> dist(0.0, 1.0);
+        // Fill param_set from file
 
-        #pragma omp for
-        for (size_t i = 0; i < SAMPLES; i++) {
-            for (int j = 0; j < NUM_PARAMS; j++) {
-                param_set[i * NUM_PARAMS + j] = (0.85 + 0.3 * dist(gen)) * default_params[j];
+        ifstream inputFile;
+        inputFile.open(INPUT_FILE);
+
+        if (!inputFile.is_open()) {
+            cout << "Failed to open " << INPUT_FILE << endl;
+            error_status = 1;
+        } else {
+            int position = 0;
+            double temp;
+
+            while (inputFile >> temp) {
+                param_set[position] = temp;
+                position++;
             }
         }
+
+    } else {
+
+        #pragma omp parallel
+        {
+            int tid = omp_get_thread_num();
+            mt19937 gen(1337 + tid);
+            uniform_real_distribution<double> dist(0.0, 1.0);
+
+            #pragma omp for
+            for (size_t i = 0; i < SAMPLES; i++) {
+                for (int j = 0; j < NUM_PARAMS; j++) {
+                    param_set[i * NUM_PARAMS + j] = (0.85 + 0.3 * dist(gen)) * default_params[j];
+                }
+            }
+        }
+
     }
 
     auto end_params = chrono::steady_clock::now();
