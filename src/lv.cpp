@@ -90,11 +90,11 @@ int main() {
     auto end_total = chrono::steady_clock::now();
     auto elapsed_total = chrono::duration_cast<chrono::milliseconds>(end_total - start_total);
 
-    cout << "Total time: " << elapsed_total.count() << " ms\n";
-
     for (int idx = 0; idx < 5; idx++) {
         cout << "State " << idx << ": " << results[idx * 2] << " " << results[idx * 2 + 1] << endl;
     }
+
+    cout << "Total time: " << elapsed_total.count() << " ms\n";
 
     return error_status;
 }
