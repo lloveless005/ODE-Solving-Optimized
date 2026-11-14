@@ -58,7 +58,7 @@ int main() {
 
         auto end_write = chrono::steady_clock::now();
         auto elapsed_write = chrono::duration_cast<chrono::milliseconds>(end_write - start_write);
-        cout << "Parameter generation time: " << elapsed_write.count() << " ms" << endl;
+        cout << "File write time: " << elapsed_write.count() << " ms" << endl;
     }
 
     delete [] param_set;
