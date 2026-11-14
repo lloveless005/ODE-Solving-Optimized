@@ -6,6 +6,7 @@
 #include <cuda/std/array>
 #include <string>
 #include <vector>
+#include <fstream>
 
 using namespace std;
 
@@ -14,6 +15,9 @@ using Param = cuda::std::array<double, 4>;
 
 #define NUM_PARAMS 4
 #define SAMPLES (1 << 20)
+
+#define INPUT_FILE "input/standard-parameters.txt"
+constexpr bool use_input_file = false;
 
 #define THREADS 256
 
@@ -50,25 +54,29 @@ __device__ void solve_ode(double t0, double t_end, State &inState, double h, con
 
 
 int main() {
-    int errorStatus = 0;
+    int error_status = 0;
 
     constexpr double t0 = 0.0;
     constexpr double t_end = 10.0;
     constexpr double h = 0.1;
 
+    // CUDA events for total program benchmark 
+
     cudaEvent_t total_start, total_stop;
-    cudaEventCreate(&total_start);
-    cudaEventCreate(&total_stop);
-    cudaEventRecord(total_start);
+    cudaCheckError(cudaEventCreate(&total_start));
+    cudaCheckError(cudaEventCreate(&total_stop));
+
+    cudaCheckError(cudaEventRecord(total_start));
 
     // CUDA events for benchmarking parameter generation
+
     cudaEvent_t param_start, param_stop;
-    cudaEventCreate(&param_start);
-    cudaEventCreate(&param_stop);
+    cudaCheckError(cudaEventCreate(&param_start));
+    cudaCheckError(cudaEventCreate(&param_stop));
+
+    cudaCheckError(cudaEventRecord(param_start));
 
     // Allocate arrays on GPU
-
-    cudaEventRecord(param_start);
 
     double* param_set = nullptr;        
     cudaCheckError(cudaMalloc(&param_set, SAMPLES * NUM_PARAMS * sizeof(double)));
@@ -76,68 +84,97 @@ int main() {
     double* results = nullptr;
     cudaCheckError(cudaMalloc(&results, SAMPLES * 2 * sizeof(double)));
 
-    // Fill param_set array with random uniform doubles
+    if (use_input_file) {
 
-    curandGenerator_t gen;
-    curandCheckError(curandCreateGenerator(&gen, CURAND_RNG_PSEUDO_PHILOX4_32_10));
-    curandCheckError(curandSetPseudoRandomGeneratorSeed(gen, 1337ULL));
+        // Fill param_set from file
 
-    curandCheckError(curandGenerateUniformDouble(gen, param_set, SAMPLES * NUM_PARAMS));
+        ifstream inputFile;
+        inputFile.open(INPUT_FILE);
 
-    // Use random uniform values to make varied parameter sets
+        if (!inputFile.is_open()) {
+            cout << "Failed to open " << INPUT_FILE << endl;
+            error_status = 1;
+        } else {
+            double* host_params = new double[SAMPLES * NUM_PARAMS];
+            double temp;
+            int position = 0;
 
-    int blocksGen = (SAMPLES * NUM_PARAMS + THREADS - 1) / THREADS;
-    GenerateParameters<<<blocksGen, THREADS>>>(param_set, SAMPLES * NUM_PARAMS);
-    cudaCheckKernel();
+            while (inputFile >> temp) {
+                host_params[position] = temp;
+                position++;
+            }
 
-    cudaEventRecord(param_stop);
-    cudaEventSynchronize(param_stop);
+            cudaCheckError(cudaMemcpy(param_set, host_params, SAMPLES * NUM_PARAMS * sizeof(double), cudaMemcpyHostToDevice));
+        }
+
+    } else {
+
+        // Fill param_set array with random uniform doubles
+     
+        curandGenerator_t gen;
+        curandCheckError(curandCreateGenerator(&gen, CURAND_RNG_PSEUDO_PHILOX4_32_10));
+        curandCheckError(curandSetPseudoRandomGeneratorSeed(gen, 1337ULL));
+
+        curandCheckError(curandGenerateUniformDouble(gen, param_set, SAMPLES * NUM_PARAMS));
+
+        // Use random uniform values to make varied parameter sets
+
+        int blocksGen = (SAMPLES * NUM_PARAMS + THREADS - 1) / THREADS;
+        GenerateParameters<<<blocksGen, THREADS>>>(param_set, SAMPLES * NUM_PARAMS);
+        cudaCheckKernel();
+
+        curandCheckError(curandDestroyGenerator(gen));
+
+    }
+
+    cudaCheckError(cudaEventRecord(param_stop));
+    cudaCheckError(cudaEventSynchronize(param_stop));
     float param_ms = 0.0;
-    cudaEventElapsedTime(&param_ms, param_start, param_stop);
+    cudaCheckError(cudaEventElapsedTime(&param_ms, param_start, param_stop));
     cout << "Parameter generation time: " << param_ms << " ms" << endl;
 
     // CUDA events for benchmarking ODE solving
+    if (error_status == 0) {
+        cudaEvent_t solve_start, solve_stop;
+        cudaCheckError(cudaEventCreate(&solve_start));
+        cudaCheckError(cudaEventCreate(&solve_stop));
 
-    cudaEvent_t solve_start, solve_stop;
-    cudaEventCreate(&solve_start);
-    cudaEventCreate(&solve_stop);
+        cudaCheckError(cudaEventRecord(solve_start));
 
-    cudaEventRecord(solve_start);
+        // Solving ODEs for each parameter set
 
-    // Solving ODEs for each parameter set
+        int blocksSolve = (SAMPLES + THREADS - 1) / THREADS;
+        SolveGPU<<<blocksSolve, THREADS>>>(results, t0, t_end, h, param_set);
+        cudaCheckKernel();
 
-    int blocksSolve = (SAMPLES + THREADS - 1) / THREADS;
-    SolveGPU<<<blocksSolve, THREADS>>>(results, t0, t_end, h, param_set);
-    cudaCheckKernel();
+        // Copy results array to host
 
-    // Copy results array to host
+        vector<double> host_results(SAMPLES * 2);
+        cudaCheckError(cudaDeviceSynchronize());
+        cudaCheckError(cudaMemcpy(host_results.data(), results, SAMPLES * 2  *sizeof(double), cudaMemcpyDeviceToHost));
 
-    vector<double> host_results(SAMPLES * 2);
-    cudaCheckError(cudaDeviceSynchronize());
-    cudaCheckError(cudaMemcpy(host_results.data(), results, SAMPLES * 2  *sizeof(double), cudaMemcpyDeviceToHost));
+        cudaCheckError(cudaEventRecord(solve_stop));
+        cudaCheckError(cudaEventSynchronize(solve_stop));
+        float solve_ms = 0.0;
+        cudaCheckError(cudaEventElapsedTime(&solve_ms, solve_start, solve_stop));
+        cout << "Simulation time: " << solve_ms << " ms" << endl;
 
-    cudaEventRecord(solve_stop);
-    cudaEventSynchronize(solve_stop);
-    float solve_ms = 0.0;
-    cudaEventElapsedTime(&solve_ms, solve_start, solve_stop);
-    cout << "Simulation time: " << solve_ms << " ms" << endl;
-
-    for (int idx = 0; idx < 5; idx++) {
-        cout << "State " << idx << ": " << host_results[idx * 2] << " " << host_results[idx * 2 + 1] << endl;
+        for (int idx = 0; idx < 5; idx++) {
+            cout << "State " << idx << ": " << host_results[idx * 2] << " " << host_results[idx * 2 + 1] << endl;
+        }
     }
 
-    cudaEventRecord(total_stop);
-    cudaEventSynchronize(total_stop);
+    cudaCheckError(cudaEventRecord(total_stop));
+    cudaCheckError(cudaEventSynchronize(total_stop));
     float total_ms = 0.0;
-    cudaEventElapsedTime(&total_ms, total_start, total_stop);
+    cudaCheckError(cudaEventElapsedTime(&total_ms, total_start, total_stop));
     cout << "Total time: " << total_ms << " ms" << endl;
 
     // Deallocate
     cudaCheckError(cudaFree(param_set));
     cudaCheckError(cudaFree(results));
-    curandCheckError(curandDestroyGenerator(gen));
 
-    return errorStatus;
+    return error_status;
 }
 
 
