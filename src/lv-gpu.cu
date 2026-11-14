@@ -56,7 +56,20 @@ int main() {
     constexpr double t_end = 10.0;
     constexpr double h = 0.1;
 
+    cudaEvent_t total_start, total_stop;
+    cudaEventCreate(&total_start);
+    cudaEventCreate(&total_stop);
+    cudaEventRecord(total_start);
+
+    // CUDA events for benchmarking parameter generation
+    cudaEvent_t param_start, param_stop;
+    cudaEventCreate(&param_start);
+    cudaEventCreate(&param_stop);
+
     // Allocate arrays on GPU
+
+    cudaEventRecord(param_start);
+
     double* param_set = nullptr;        
     cudaCheckError(cudaMalloc(&param_set, SAMPLES * NUM_PARAMS * sizeof(double)));
 
@@ -77,25 +90,49 @@ int main() {
     GenerateParameters<<<blocksGen, THREADS>>>(param_set, SAMPLES * NUM_PARAMS);
     cudaCheckKernel();
 
-    // todo: solve ODEs for random parameter sets
+    cudaEventRecord(param_stop);
+    cudaEventSynchronize(param_stop);
+    float param_ms = 0.0;
+    cudaEventElapsedTime(&param_ms, param_start, param_stop);
+    cout << "Parameter generation time: " << param_ms << " ms" << endl;
+
+    // CUDA events for benchmarking ODE solving
+
+    cudaEvent_t solve_start, solve_stop;
+    cudaEventCreate(&solve_start);
+    cudaEventCreate(&solve_stop);
+
+    cudaEventRecord(solve_start);
+
+    // Solving ODEs for each parameter set
 
     int blocksSolve = (SAMPLES + THREADS - 1) / THREADS;
     SolveGPU<<<blocksSolve, THREADS>>>(results, t0, t_end, h, param_set);
     cudaCheckKernel();
 
-    // todo: copy results array to host
+    // Copy results array to host
 
-    double* host_results = new double[SAMPLES * 2];
+    vector<double> host_results(SAMPLES * 2);
     cudaCheckError(cudaDeviceSynchronize());
-    cudaCheckError(cudaMemcpy(host_results, results, SAMPLES * 2  *sizeof(double), cudaMemcpyDeviceToHost));
+    cudaCheckError(cudaMemcpy(host_results.data(), results, SAMPLES * 2  *sizeof(double), cudaMemcpyDeviceToHost));
+
+    cudaEventRecord(solve_stop);
+    cudaEventSynchronize(solve_stop);
+    float solve_ms = 0.0;
+    cudaEventElapsedTime(&solve_ms, solve_start, solve_stop);
+    cout << "Simulation time: " << solve_ms << " ms" << endl;
 
     for (int idx = 0; idx < 5; idx++) {
         cout << "State " << idx << ": " << host_results[idx * 2] << " " << host_results[idx * 2 + 1] << endl;
     }
 
+    cudaEventRecord(total_stop);
+    cudaEventSynchronize(total_stop);
+    float total_ms = 0.0;
+    cudaEventElapsedTime(&total_ms, total_start, total_stop);
+    cout << "Total time: " << total_ms << " ms" << endl;
+
     // Deallocate
-    delete [] host_results;
-    host_results = nullptr;
     cudaCheckError(cudaFree(param_set));
     cudaCheckError(cudaFree(results));
     curandCheckError(curandDestroyGenerator(gen));
