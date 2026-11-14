@@ -20,6 +20,9 @@ using namespace std;
 using State = array<double, 2>;
 using Param = array<double, 4>;
 
+#define NUM_PARAMS 4
+#define SAMPLES (1 << 20)
+
 
 State ode_val(const Param& params, const State& in_state);
 
@@ -30,8 +33,6 @@ int main() {
     int error_status = 0;
 
     auto start_total = chrono::steady_clock::now();
-    size_t samples = 1 << 20;
-    constexpr int num_params = 4;
 
     constexpr Param default_params = {1.0, 0.1, 0.075, 1.5};
 
@@ -40,7 +41,7 @@ int main() {
     constexpr double h = 0.1;
 
     // Generate 2**20 random parameters within +-15% of the default values 
-    vector<double> param_set(samples * num_params);
+    vector<double> param_set(SAMPLES * NUM_PARAMS);
 
 
     #pragma omp parallel
@@ -50,9 +51,9 @@ int main() {
         uniform_real_distribution<double> dist(0.0, 1.0);
 
         #pragma omp for
-        for (size_t i = 0; i < samples; i++) {
-            for (int j = 0; j < num_params; j++) {
-                param_set[i * num_params + j] = (0.85 + 0.3 * dist(gen)) * default_params[j];
+        for (size_t i = 0; i < SAMPLES; i++) {
+            for (int j = 0; j < NUM_PARAMS; j++) {
+                param_set[i * NUM_PARAMS + j] = (0.85 + 0.3 * dist(gen)) * default_params[j];
             }
         }
     }
@@ -60,17 +61,19 @@ int main() {
     auto end_params = chrono::steady_clock::now();
     auto elapsed_params = chrono::duration_cast<chrono::milliseconds>(end_params - start_total);
 
+    cout << "Parameter generation time: " << elapsed_params.count() << " ms\n";
+
     // Solve ODE system for each parameter set
     auto start_sim = chrono::steady_clock::now();
 
-    vector<double> results(2 * samples);
+    vector<double> results(2 * SAMPLES);
 
     #pragma omp parallel for
-    for (size_t i = 0; i < samples; i++) {
-        Param temp_params = {param_set[i * num_params], 
-            param_set[i * num_params + 1], 
-            param_set[i * num_params + 2],
-            param_set[i * num_params + 3]
+    for (size_t i = 0; i < SAMPLES; i++) {
+        Param temp_params = {param_set[i * NUM_PARAMS], 
+            param_set[i * NUM_PARAMS + 1], 
+            param_set[i * NUM_PARAMS + 2],
+            param_set[i * NUM_PARAMS + 3]
         };
 
         State temp_state = {10.0, 5.0};
@@ -82,11 +85,11 @@ int main() {
     auto end_sim = chrono::steady_clock::now();
     auto elapsed_sim = chrono::duration_cast<chrono::milliseconds>(end_sim - start_sim);
 
+    cout << "Simulation time: " << elapsed_sim.count() << " ms\n";
+
     auto end_total = chrono::steady_clock::now();
     auto elapsed_total = chrono::duration_cast<chrono::milliseconds>(end_total - start_total);
 
-    cout << "Parameter generation time: " << elapsed_params.count() << " ms\n";
-    cout << "Simulation time: " << elapsed_sim.count() << " ms\n";
     cout << "Total time: " << elapsed_total.count() << " ms\n";
 
     for (int idx = 0; idx < 5; idx++) {
