@@ -1,4 +1,4 @@
-.PHONY: all clean gpu
+.PHONY: all clean gpu noflags std-params
 
 CXX 	    = g++
 LD 	        = g++
@@ -14,7 +14,7 @@ TARGET_NF   = $(BIN_DIR)/lv-nf
 TARGET_GPU  = $(BIN_DIR)/lv-cu
 TARGET_STDP = $(BIN_DIR)/std-params
 
-all: $(TARGET)
+all: $(TARGET) $(TARGET_NF) $(TARGET_GPU) $(TARGET_STDP)
 
 $(TARGET): $(OBJ_DIR)/lv.o | $(BIN_DIR)
 	$(LD) $(LDFLAGS) $^ -o $@
