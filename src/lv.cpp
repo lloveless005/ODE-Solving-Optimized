@@ -27,8 +27,10 @@ void solve_ode(double t0, double t_end, State& in_state, double h, const Param& 
 
 
 int main() {
+    int error_status = 0;
+
     auto start_total = chrono::steady_clock::now();
-    size_t samples = 1 << stoi(argv[1]);
+    size_t samples = 1 << 20;
     constexpr int num_params = 4;
 
     constexpr Param default_params = {1.0, 0.1, 0.075, 1.5};
@@ -87,9 +89,8 @@ int main() {
     cout << "Simulation time: " << elapsed_sim.count() << " ms\n";
     cout << "Total time: " << elapsed_total.count() << " ms\n";
 
-    cout << "Sample end states: " << endl;
     for (int idx = 0; idx < 5; idx++) {
-        cout << results[idx * 2] << " " << results[idx * 2 + 1] << endl;
+        cout << "State " << idx << ": " << results[idx * 2] << " " << results[idx * 2 + 1] << endl;
     }
 
     return error_status;
