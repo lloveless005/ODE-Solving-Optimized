@@ -2,6 +2,7 @@
 #include <device_launch_parameters.h>
 #include <curand.h>
 #include <iostream>
+#include <cstdio>
 #include <cuda/std/array>
 #include <string>
 #include <vector>
@@ -13,7 +14,6 @@ using Param = cuda::std::array<double, 4>;
 
 #define NUM_PARAMS 4
 #define SAMPLES (1 << 20)
-#define DEFAULT_PARAMS cuda::std::array<double, 4>{1.0, 0.1, 0.075, 1.5}
 
 #define THREADS 256
 
@@ -31,14 +31,16 @@ using Param = cuda::std::array<double, 4>;
     } \
 }
 
+#define cudaCheckKernel() cudaCheckError(cudaGetLastError())
 
 
 
-__global__ void SolveGPU(cuda::std::array<double, 2 * SAMPLES>* results, 
+
+__global__ void SolveGPU(double* results,  
                         const double t0, 
                         const double t_end, 
                         const double h, 
-                        const cuda::std::array<double, SAMPLES * NUM_PARAMS> param_set);
+                        const double* param_set);
 
 __global__ void GenerateParameters(double* param_set, const int size);
 
@@ -55,10 +57,11 @@ int main() {
     constexpr double h = 0.1;
 
     // Allocate arrays on GPU
-    cuda::std::array<double, SAMPLES * NUM_PARAMS>* param_set = nullptr;        cudaCheckError(cudaMalloc(&param_set, SAMPLES * sizeof(Param)));
+    double* param_set = nullptr;        
+    cudaCheckError(cudaMalloc(&param_set, SAMPLES * NUM_PARAMS * sizeof(double)));
 
-    cuda::std::array<double, 2 * SAMPLES>* results = nullptr;
-    cudaCheckError(cudaMalloc(&results, SAMPLES * sizeof(State)));
+    double* results = nullptr;
+    cudaCheckError(cudaMalloc(&results, SAMPLES * 2 * sizeof(double)));
 
     // Fill param_set array with random uniform doubles
 
@@ -66,18 +69,36 @@ int main() {
     curandCheckError(curandCreateGenerator(&gen, CURAND_RNG_PSEUDO_PHILOX4_32_10));
     curandCheckError(curandSetPseudoRandomGeneratorSeed(gen, 1337ULL));
 
-    curandCheckError(curandGenerateUniformDouble(gen, param_set->data(), SAMPLES * NUM_PARAMS));
+    curandCheckError(curandGenerateUniformDouble(gen, param_set, SAMPLES * NUM_PARAMS));
 
     // Use random uniform values to make varied parameter sets
 
     int blocksGen = (SAMPLES * NUM_PARAMS + THREADS - 1) / THREADS;
-    GenerateParameters<<<blocksGen, THREADS>>>(param_set->data(), SAMPLES * NUM_PARAMS);
+    GenerateParameters<<<blocksGen, THREADS>>>(param_set, SAMPLES * NUM_PARAMS);
+    cudaCheckKernel();
 
     // todo: solve ODEs for random parameter sets
+
+    int blocksSolve = (SAMPLES + THREADS - 1) / THREADS;
+    SolveGPU<<<blocksSolve, THREADS>>>(results, t0, t_end, h, param_set);
+    cudaCheckKernel();
+
     // todo: copy results array to host
 
+    double* host_results = new double[SAMPLES * 2];
+    cudaCheckError(cudaDeviceSynchronize());
+    cudaCheckError(cudaMemcpy(host_results, results, SAMPLES * 2  *sizeof(double), cudaMemcpyDeviceToHost));
+
+    for (int idx = 0; idx < 5; idx++) {
+        cout << "State " << idx << ": " << host_results[idx * 2] << " " << host_results[idx * 2 + 1] << endl;
+    }
+
+    // Deallocate
+    delete [] host_results;
+    host_results = nullptr;
     cudaCheckError(cudaFree(param_set));
     cudaCheckError(cudaFree(results));
+    curandCheckError(curandDestroyGenerator(gen));
 
     return errorStatus;
 }
@@ -105,9 +126,11 @@ __global__ void SolveGPU(double* results,
 }
 
 __global__ void GenerateParameters(double* param_set, const int size) {
+    constexpr Param defaults{1.0, 0.1, 0.075, 1.5};
+
     int i = blockIdx.x * blockDim.x + threadIdx.x;
-    if (i < SAMPLES * NUM_PARAMS) {
-        param_set[i] = (0.85 + 0.3 * param_set[i]) * DEFAULT_PARAMS[i % 4];
+    if (i < size) {
+        param_set[i] = (0.85 + 0.3 * param_set[i]) * defaults[i % 4];
     }
 }
 
