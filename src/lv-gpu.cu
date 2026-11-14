@@ -17,7 +17,7 @@ using Param = cuda::std::array<double, 4>;
 #define SAMPLES (1 << 20)
 
 #define INPUT_FILE "input/standard-parameters.txt"
-constexpr bool use_input_file = false;
+constexpr bool use_input_file = true;
 
 #define THREADS 256
 
