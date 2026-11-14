@@ -19,10 +19,10 @@ int main() {
 
     // initialize output file stream
     ofstream outputFile64;
-    outputFile64.open(FILE_NAME_FP64);
+    outputFile64.open(FILE_NAME_FP64, ios::binary);
 
     ofstream outputFile32;
-    outputFile32.open(FILE_NAME_FP32);
+    outputFile32.open(FILE_NAME_FP32, ios::binary);
 
     vector<double> param_set_fp64(SAMPLES * NUM_PARAMS);
     constexpr double default_params_fp64[] = {1.0, 0.1, 0.075, 1.5};
