@@ -3,6 +3,7 @@
 #include <omp.h>
 #include <random>
 #include <format>
+#include <chrono>
 
 #define FILE_NAME "input/standard-parameters.txt"
 #define NUM_PARAMS 4
@@ -11,6 +12,7 @@ constexpr int SAMPLES = 1 << 20;
 using namespace std;
 
 int main() {
+    auto start_total = chrono::steady_clock::now();
     int error_status = 0;
 
     // initialize output file stream
@@ -28,6 +30,8 @@ int main() {
     } else {
 
         // generate random parameters
+        auto start_gen = chrono::steady_clock::now();
+
         #pragma omp parallel
         {
             int tid = omp_get_thread_num();
@@ -41,14 +45,28 @@ int main() {
                 }
             }
         }
+        auto end_gen = chrono::steady_clock::now();
+        auto elapsed_gen = chrono::duration_cast<chrono::milliseconds>(end_gen - start_gen);
+        cout << "Parameter generation time: " << elapsed_gen.count() << " ms" << endl;
+
+
+        auto start_write = chrono::steady_clock::now();
 
         for (int idx = 0; idx < SAMPLES * NUM_PARAMS; idx++) {
             outputFile << format("{}", param_set[idx]) << endl;
         }
+
+        auto end_write = chrono::steady_clock::now();
+        auto elapsed_write = chrono::duration_cast<chrono::milliseconds>(end_write - start_write);
+        cout << "Parameter generation time: " << elapsed_write.count() << " ms" << endl;
     }
 
     delete [] param_set;
     outputFile.close();
+
+    auto end_total = chrono::steady_clock::now();
+    auto elapsed_total = chrono::duration_cast<chrono::milliseconds>(end_total - start_total);
+    cout << "Total time: " << elapsed_total.count() << " ms" << endl;
 
     return error_status;
 }
