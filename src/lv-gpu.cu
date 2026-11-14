@@ -8,6 +8,13 @@
 #include <vector>
 #include <fstream>
 
+/*TODO
+- switch file IO to binary for fast reads
+- make a program that rigorously compares the deviation from the cpu script
+- investigate fp32 vs fp64
+- profile the program to find more optimizations
+*/
+
 using namespace std;
 
 using State = cuda::std::array<double, 2>;
