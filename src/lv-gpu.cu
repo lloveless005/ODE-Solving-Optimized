@@ -23,7 +23,8 @@ using Param = cuda::std::array<double, 4>;
 #define NUM_PARAMS 4
 #define SAMPLES (1 << 20)
 
-#define INPUT_FILE "input/standard-parameters.txt"
+#define INPUT_FILE_FP64 "input/standard-parameters-fp64.txt"
+#define INPUT_FILE_FP32 "input/standard-parameters-fp32.txt"
 constexpr bool use_input_file = true;
 
 #define THREADS 256
@@ -85,8 +86,11 @@ int main() {
 
     // Allocate arrays on GPU
 
-    double* param_set = nullptr;        
-    cudaCheckError(cudaMalloc(&param_set, SAMPLES * NUM_PARAMS * sizeof(double)));
+    double* param_set_fp64 = nullptr;        
+    cudaCheckError(cudaMalloc(&param_set_fp64, SAMPLES * NUM_PARAMS * sizeof(double)));
+
+    float* param_set_fp32 = nullptr;
+    cudaCheckError(cudaMalloc(&param_set_fp32, SAMPLES * NUM_PARAMS * sizeof(float)));
 
     double* results = nullptr;
     cudaCheckError(cudaMalloc(&results, SAMPLES * 2 * sizeof(double)));
@@ -95,23 +99,30 @@ int main() {
 
         // Fill param_set from file
 
-        ifstream inputFile;
-        inputFile.open(INPUT_FILE);
+        ifstream inputFile64;
+        inputFile64.open(INPUT_FILE_FP64, ios::binary);
 
-        if (!inputFile.is_open()) {
-            cout << "Failed to open " << INPUT_FILE << endl;
+        ifstream inputFile32;
+        inputFile32.open(INPUT_FILE_FP32, ios::binary);
+
+        if (!inputFile64.is_open()) {
+            cout << "Failed to open " << INPUT_FILE_FP64 << endl;
             error_status = 1;
+        } else if (!inputFile32.is_open()) {
+            cout << "Failed to open " << INPUT_FILE_FP32 << endl;
+            error_status = 2;
         } else {
-            double* host_params = new double[SAMPLES * NUM_PARAMS];
-            double temp;
-            int position = 0;
+            vector<double> host_params_fp64(SAMPLES * NUM_PARAMS);
+            vector<float> host_params_fp32(SAMPLES * NUM_PARAMS);
+            
+            inputFile64.read(reinterpret_cast<char*>(host_params_fp64.data()), SAMPLES * NUM_PARAMS * sizeof(double));
+            inputFile32.read(reinterpret_cast<char*>(host_params_fp32.data()), SAMPLES * NUM_PARAMS * sizeof(float));
 
-            while (inputFile >> temp) {
-                host_params[position] = temp;
-                position++;
-            }
+            cudaCheckError(cudaMemcpy(param_set_fp64, host_params_fp64.data(), SAMPLES * NUM_PARAMS * sizeof(double), cudaMemcpyHostToDevice));
+            cudaCheckError(cudaMemcpy(param_set_fp32, host_params_fp32.data(), SAMPLES * NUM_PARAMS * sizeof(float), cudaMemcpyHostToDevice));
 
-            cudaCheckError(cudaMemcpy(param_set, host_params, SAMPLES * NUM_PARAMS * sizeof(double), cudaMemcpyHostToDevice));
+            inputFile64.close();
+            inputFile32.close();
         }
 
     } else {
@@ -122,17 +133,19 @@ int main() {
         curandCheckError(curandCreateGenerator(&gen, CURAND_RNG_PSEUDO_PHILOX4_32_10));
         curandCheckError(curandSetPseudoRandomGeneratorSeed(gen, 1337ULL));
 
-        curandCheckError(curandGenerateUniformDouble(gen, param_set, SAMPLES * NUM_PARAMS));
+        curandCheckError(curandGenerateUniformDouble(gen, param_set_fp64, SAMPLES * NUM_PARAMS));
 
         // Use random uniform values to make varied parameter sets
 
         int blocksGen = (SAMPLES * NUM_PARAMS + THREADS - 1) / THREADS;
-        GenerateParameters<<<blocksGen, THREADS>>>(param_set, SAMPLES * NUM_PARAMS);
+        GenerateParameters<<<blocksGen, THREADS>>>(param_set_fp64, SAMPLES * NUM_PARAMS);
         cudaCheckKernel();
 
         curandCheckError(curandDestroyGenerator(gen));
 
     }
+
+    // CUDA events for benchmarking parameter generation
 
     cudaCheckError(cudaEventRecord(param_stop));
     cudaCheckError(cudaEventSynchronize(param_stop));
@@ -140,8 +153,9 @@ int main() {
     cudaCheckError(cudaEventElapsedTime(&param_ms, param_start, param_stop));
     cout << "Parameter generation time: " << param_ms << " ms" << endl;
 
-    // CUDA events for benchmarking ODE solving
     if (error_status == 0) {
+        // CUDA events for benchmarking ODE solving
+
         cudaEvent_t solve_start, solve_stop;
         cudaCheckError(cudaEventCreate(&solve_start));
         cudaCheckError(cudaEventCreate(&solve_stop));
@@ -151,7 +165,7 @@ int main() {
         // Solving ODEs for each parameter set
 
         int blocksSolve = (SAMPLES + THREADS - 1) / THREADS;
-        SolveGPU<<<blocksSolve, THREADS>>>(results, t0, t_end, h, param_set);
+        SolveGPU<<<blocksSolve, THREADS>>>(results, t0, t_end, h, param_set_fp64);
         cudaCheckKernel();
 
         // Copy results array to host
@@ -160,16 +174,22 @@ int main() {
         cudaCheckError(cudaDeviceSynchronize());
         cudaCheckError(cudaMemcpy(host_results.data(), results, SAMPLES * 2  *sizeof(double), cudaMemcpyDeviceToHost));
 
+        // CUDA events for benchmarking ODE solving
+
         cudaCheckError(cudaEventRecord(solve_stop));
         cudaCheckError(cudaEventSynchronize(solve_stop));
         float solve_ms = 0.0;
         cudaCheckError(cudaEventElapsedTime(&solve_ms, solve_start, solve_stop));
         cout << "Simulation time: " << solve_ms << " ms" << endl;
 
+        // Output the head of the states set
+
         for (int idx = 0; idx < 5; idx++) {
             cout << "State " << idx << ": " << host_results[idx * 2] << " " << host_results[idx * 2 + 1] << endl;
         }
     }
+
+    // CUDA events for total program benchmark 
 
     cudaCheckError(cudaEventRecord(total_stop));
     cudaCheckError(cudaEventSynchronize(total_stop));
@@ -177,8 +197,9 @@ int main() {
     cudaCheckError(cudaEventElapsedTime(&total_ms, total_start, total_stop));
     cout << "Total time: " << total_ms << " ms" << endl;
 
-    // Deallocate
-    cudaCheckError(cudaFree(param_set));
+    // Deallocate GPU arrays
+
+    cudaCheckError(cudaFree(param_set_fp64));
     cudaCheckError(cudaFree(results));
 
     return error_status;
