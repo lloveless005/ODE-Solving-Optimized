@@ -5,16 +5,4 @@ The goal for this project is to start with a simple implementation of parallel O
 | Part | Model|
 | ---- | ---- |
 | CPU | AMD Ryzen 7 5800X3D |
-| GPU | Nvidia RTX 5070|
-
-# Benchmarks for $2^{20}$ simulations (pre-August 2026 build)
-
-| Optimization | Simulation Time | Total Time |
-| ---- | ---- | ---- |
-| Start | 13863 ms | 14083 ms |
-| Add -O3 compilation flag | 2080 ms | 2115 ms |
-| Add -march=native flag | 1910 ms | 1943 ms |
-| Add parallelism via OpenMP | 185 ms | 212 ms |
-| Condense random parameter generation | 185 ms | 208 ms |
-| Add -ffast-math compilation flag | 159 ms | 180 ms |
-| Pass by value in ODE solver | 115 ms | 135 ms |
+| GPU | Nvidia RTX 5070 |
