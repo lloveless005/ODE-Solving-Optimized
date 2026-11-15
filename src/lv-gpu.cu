@@ -8,6 +8,7 @@
 #include <vector>
 #include <fstream>
 #include <globals.h>
+#include <cmath>
 
 /*TODO
 - switch file IO to binary for fast reads
@@ -18,12 +19,14 @@
 
 using namespace std;
 
-using State = cuda::std::array<double, 2>;
-using Param = cuda::std::array<double, 4>;
+template <typename T>
+using State = cuda::std::array<T, 2>;
+
+template <typename T>
+using Param = cuda::std::array<T, 4>;
 
 #define INPUT_FILE_FP64 "input/standard-parameters-fp64.txt"
 #define INPUT_FILE_FP32 "input/standard-parameters-fp32.txt"
-constexpr bool use_input_file = true;
 
 #define THREADS 256
 
@@ -45,18 +48,56 @@ constexpr bool use_input_file = true;
 
 
 
+template <typename T>
+__global__ void SolveGPU(T* results, const int steps, const T h, const T* param_set) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < SAMPLES) {
+        State<T> temp_state = {10.0, 5.0};
+        Param<T> temp_params;
+        for (int idx = 0; idx < NUM_PARAMS; idx++) {
+            temp_params[idx] = param_set[i * NUM_PARAMS + idx];
+        }
 
-__global__ void SolveGPU(double* results,  
-                        const double t0, 
-                        const double t_end, 
-                        const double h, 
-                        const double* param_set);
+        solve_64_ode(steps, temp_state, h, temp_params);
 
-__global__ void GenerateParameters(double* param_set, const int size);
+        results[i * 2] = temp_state[0];
+        results[i * 2 + 1] = temp_state[1];
+    }
+}
 
-__device__ State ode_val(const Param &params, const State &inState);
+template <typename T>
+__device__ State<T> ode_val(const Param<T> &params, const State<T> &inState) {
+    return {
+        params[0] * inState[0] - params[1] * inState[0] * inState[1],
+        params[2] * inState[0] * inState[1] - params[3] * inState[1]
+    };
+}
 
-__device__ void solve_ode(double t0, double t_end, State &inState, double h, const Param &inParams);
+template <typename T>
+__device__ void solve_64_ode(int steps, State<T> &inState, T h, const Param<T> &inParams) {
+    int current = 0;
+
+    while (current < steps) {
+
+        // Runge-Kutta 4th order solver
+        
+        State<T> k1 = ode_val(inParams, inState);
+
+        State<T> temp_state = {inState[0] + (h * k1[0]) / 2.0, inState[1] + (h * k1[1]) / 2.0};
+        State<T> k2 = ode_val(inParams, temp_state);
+
+        temp_state = {inState[0] + (h * k2[0]) / 2.0, inState[1] + (h * k2[1]) / 2.0};
+        State<T> k3 = ode_val(inParams, temp_state);
+
+        temp_state = {inState[0] + (h * k3[0]), inState[1] + (h * k3[1])};
+        State<T> k4 = ode_val(inParams, temp_state);
+
+        inState[0] += (k1[0] + 2.0 * k2[0] + 2.0 * k3[0] + k4[0]) * (h / 6.0);
+        inState[1] += (k1[1] + 2.0 * k2[1] + 2.0 * k3[1] + k4[1]) * (h / 6.0);
+        current++;
+        
+    }
+}
 
 
 int main() {
@@ -65,6 +106,7 @@ int main() {
     constexpr double t0 = 0.0;
     constexpr double t_end = 10.0;
     constexpr double h = 0.1;
+    constexpr int steps = ceil((t_end - t0) / h);
 
     // CUDA events for total program benchmark 
 
@@ -93,54 +135,32 @@ int main() {
     double* results = nullptr;
     cudaCheckError(cudaMalloc(&results, SAMPLES * 2 * sizeof(double)));
 
-    if (use_input_file) {
+    // Fill param_set from file
 
-        // Fill param_set from file
+    ifstream inputFile64;
+    inputFile64.open(INPUT_FILE_FP64, ios::binary);
 
-        ifstream inputFile64;
-        inputFile64.open(INPUT_FILE_FP64, ios::binary);
+    ifstream inputFile32;
+    inputFile32.open(INPUT_FILE_FP32, ios::binary);
 
-        ifstream inputFile32;
-        inputFile32.open(INPUT_FILE_FP32, ios::binary);
-
-        if (!inputFile64.is_open()) {
-            cout << "Failed to open " << INPUT_FILE_FP64 << endl;
-            error_status = 1;
-        } else if (!inputFile32.is_open()) {
-            cout << "Failed to open " << INPUT_FILE_FP32 << endl;
-            error_status = 2;
-        } else {
-            vector<double> host_params_fp64(SAMPLES * NUM_PARAMS);
-            vector<float> host_params_fp32(SAMPLES * NUM_PARAMS);
-            
-            inputFile64.read(reinterpret_cast<char*>(host_params_fp64.data()), SAMPLES * NUM_PARAMS * sizeof(double));
-            inputFile32.read(reinterpret_cast<char*>(host_params_fp32.data()), SAMPLES * NUM_PARAMS * sizeof(float));
-
-            cudaCheckError(cudaMemcpy(param_set_fp64, host_params_fp64.data(), SAMPLES * NUM_PARAMS * sizeof(double), cudaMemcpyHostToDevice));
-            cudaCheckError(cudaMemcpy(param_set_fp32, host_params_fp32.data(), SAMPLES * NUM_PARAMS * sizeof(float), cudaMemcpyHostToDevice));
-
-            inputFile64.close();
-            inputFile32.close();
-        }
-
+    if (!inputFile64.is_open()) {
+        cout << "Failed to open " << INPUT_FILE_FP64 << endl;
+        error_status = 1;
+    } else if (!inputFile32.is_open()) {
+        cout << "Failed to open " << INPUT_FILE_FP32 << endl;
+        error_status = 2;
     } else {
+        vector<double> host_params_fp64(SAMPLES * NUM_PARAMS);
+        vector<float> host_params_fp32(SAMPLES * NUM_PARAMS);
+        
+        inputFile64.read(reinterpret_cast<char*>(host_params_fp64.data()), SAMPLES * NUM_PARAMS * sizeof(double));
+        inputFile32.read(reinterpret_cast<char*>(host_params_fp32.data()), SAMPLES * NUM_PARAMS * sizeof(float));
 
-        // Fill param_set array with random uniform doubles
-     
-        curandGenerator_t gen;
-        curandCheckError(curandCreateGenerator(&gen, CURAND_RNG_PSEUDO_PHILOX4_32_10));
-        curandCheckError(curandSetPseudoRandomGeneratorSeed(gen, 1337ULL));
+        cudaCheckError(cudaMemcpy(param_set_fp64, host_params_fp64.data(), SAMPLES * NUM_PARAMS * sizeof(double), cudaMemcpyHostToDevice));
+        cudaCheckError(cudaMemcpy(param_set_fp32, host_params_fp32.data(), SAMPLES * NUM_PARAMS * sizeof(float), cudaMemcpyHostToDevice));
 
-        curandCheckError(curandGenerateUniformDouble(gen, param_set_fp64, SAMPLES * NUM_PARAMS));
-
-        // Use random uniform values to make varied parameter sets
-
-        int blocksGen = (SAMPLES * NUM_PARAMS + THREADS - 1) / THREADS;
-        GenerateParameters<<<blocksGen, THREADS>>>(param_set_fp64, SAMPLES * NUM_PARAMS);
-        cudaCheckKernel();
-
-        curandCheckError(curandDestroyGenerator(gen));
-
+        inputFile64.close();
+        inputFile32.close();
     }
 
     // CUDA events for benchmarking parameter generation
@@ -154,11 +174,11 @@ int main() {
     if (error_status == 0) {
         // CUDA events for benchmarking ODE solving
 
-        cudaEvent_t solve_start, solve_stop;
-        cudaCheckError(cudaEventCreate(&solve_start));
-        cudaCheckError(cudaEventCreate(&solve_stop));
+        cudaEvent_t solve_64_start, solve_64_stop;
+        cudaCheckError(cudaEventCreate(&solve_64_start));
+        cudaCheckError(cudaEventCreate(&solve_64_stop));
 
-        cudaCheckError(cudaEventRecord(solve_start));
+        cudaCheckError(cudaEventRecord(solve_64_start));
 
         // Solving ODEs for each parameter set
 
@@ -174,11 +194,11 @@ int main() {
 
         // CUDA events for benchmarking ODE solving
 
-        cudaCheckError(cudaEventRecord(solve_stop));
-        cudaCheckError(cudaEventSynchronize(solve_stop));
-        float solve_ms = 0.0;
-        cudaCheckError(cudaEventElapsedTime(&solve_ms, solve_start, solve_stop));
-        cout << "Simulation time: " << solve_ms << " ms" << endl;
+        cudaCheckError(cudaEventRecord(solve_64_stop));
+        cudaCheckError(cudaEventSynchronize(solve_64_stop));
+        float solve_64_ms = 0.0;
+        cudaCheckError(cudaEventElapsedTime(&solve_64_ms, solve_64_start, solve_64_stop));
+        cout << "Simulation time: " << solve_64_ms << " ms" << endl;
 
         // Output the head of the states set
 
@@ -198,72 +218,8 @@ int main() {
     // Deallocate GPU arrays
 
     cudaCheckError(cudaFree(param_set_fp64));
+    cudaCheckError(cudaFree(param_set_fp32));
     cudaCheckError(cudaFree(results));
 
     return error_status;
-}
-
-
-__global__ void SolveGPU(double* results,  
-                        const double t0, 
-                        const double t_end, 
-                        const double h, 
-                        const double* param_set) 
-{
-    int i = blockIdx.x * blockDim.x + threadIdx.x;
-    if (i < SAMPLES) {
-        State temp_state = {10.0, 5.0};
-        Param temp_params;
-        for (int idx = 0; idx < NUM_PARAMS; idx++) {
-            temp_params[idx] = param_set[i * NUM_PARAMS + idx];
-        }
-
-        solve_ode(t0, t_end, temp_state, h, temp_params);
-
-        results[i * 2] = temp_state[0];
-        results[i * 2 + 1] = temp_state[1];
-    }
-}
-
-__global__ void GenerateParameters(double* param_set, const int size) {
-    constexpr Param defaults{1.0, 0.1, 0.075, 1.5};
-
-    int i = blockIdx.x * blockDim.x + threadIdx.x;
-    if (i < size) {
-        param_set[i] = (0.85 + 0.3 * param_set[i]) * defaults[i % 4];
-    }
-}
-
-
-__device__ State ode_val(const Param &params, const State &inState) {
-    return {
-        params[0] * inState[0] - params[1] * inState[0] * inState[1],
-        params[2] * inState[0] * inState[1] - params[3] * inState[1]
-    };
-}
-
-__device__ void solve_ode(double t0, double t_end, State &inState, double h, const Param &inParams) {
-    double t = t0;
-
-    while (t < t_end) {
-        if (t + h > t_end) {
-            h = t_end - t;
-        }
-
-        // Runge-Kutta 4th order solver
-        State k1 = ode_val(inParams, inState);
-
-        State temp_state = {inState[0] + (h * k1[0]) / 2.0, inState[1] + (h * k1[1]) / 2.0};
-        State k2 = ode_val(inParams, temp_state);
-
-        temp_state = {inState[0] + (h * k2[0]) / 2.0, inState[1] + (h * k2[1]) / 2.0};
-        State k3 = ode_val(inParams, temp_state);
-
-        temp_state = {inState[0] + (h * k3[0]), inState[1] + (h * k3[1])};
-        State k4 = ode_val(inParams, temp_state);
-
-        inState[0] += (k1[0] + 2.0 * k2[0] + 2.0 * k3[0] + k4[0]) * (h / 6.0);
-        inState[1] += (k1[1] + 2.0 * k2[1] + 2.0 * k3[1] + k4[1]) * (h / 6.0);
-        t += h;
-    }
 }
