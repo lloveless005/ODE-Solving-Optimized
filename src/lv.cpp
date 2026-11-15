@@ -8,6 +8,8 @@
 #include <vector>
 #include <cmath>
 #include <globals.h>
+#include <writefile.h>
+#include <string>
 
 // Lotka-Volterra Model
 // dx/dt = ax - bxy
@@ -26,6 +28,7 @@ using Param = array<double, 4>;
 
 #define INPUT_FILE_FP64 "input/standard-parameters-fp64.bin"
 constexpr bool use_input_file = true;
+const string OUTPUT_FILE_FP64 = "output/cpu-64-" + to_string(static_cast<int>(log2(SAMPLES))) + ".bin";
 
 
 State ode_val(const Param& params, const State& in_state) {
@@ -113,9 +116,6 @@ int main() {
     auto end_params = chrono::steady_clock::now();
     auto elapsed_params = chrono::duration_cast<chrono::milliseconds>(end_params - start_total);
 
-    if (use_input_file) cout << "Parameter read time: " << elapsed_params.count() << " ms\n";
-    else cout << "Parameter generation time: " << elapsed_params.count() << " ms\n";
-
     // Solve ODE system for each parameter set
 
     vector<double> results_fp64(2 * SAMPLES);
@@ -141,16 +141,38 @@ int main() {
     auto elapsed_sim_fp64 = chrono::duration_cast<chrono::milliseconds>(end_sim_fp64 - start_sim_fp64);
 
     cout << endl << "FP64" << endl << "---------------------------------" << endl;
-    cout << "Simulation time: " << elapsed_sim_fp64.count() << " ms\n";
 
     for (int idx = 0; idx < 5; idx++) {
         cout << "State " << idx << ": " << results_fp64[idx * 2] << " " << results_fp64[idx * 2 + 1] << endl;
     }
 
+    auto start_write = chrono::steady_clock::now();
+
+    ofstream outputFile64;
+    outputFile64.open(OUTPUT_FILE_FP64, ios::binary);
+
+    if(!outputFile64.is_open()) {
+        cout << "Failed to open " << OUTPUT_FILE_FP64 << endl;
+        error_status = 2;
+    } else {
+        WriteFile(outputFile64, results_fp64);
+    }
+
+    outputFile64.close();
+
+    auto end_write = chrono::steady_clock::now();
+    auto elapsed_write = chrono::duration_cast<chrono::milliseconds>(end_write - start_write);
+
+    cout << endl;
+    if (use_input_file) cout << "Parameter read time: " << elapsed_params.count() << " ms\n";
+    else cout << "Parameter generation time: " << elapsed_params.count() << " ms\n";
+    cout << "Simulation time: " << elapsed_sim_fp64.count() << " ms\n";
+    cout << "Write time: " << elapsed_write.count() << " ms" << endl;
+
     auto end_total = chrono::steady_clock::now();
     auto elapsed_total = chrono::duration_cast<chrono::milliseconds>(end_total - start_total);
 
-    cout << endl << "Total time: " << elapsed_total.count() << " ms\n";
+    cout << endl << "Total time: " << elapsed_total.count() << " ms" << endl;
 
     return error_status;
 }
