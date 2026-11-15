@@ -7,6 +7,7 @@
 #include <string>
 #include <vector>
 #include <fstream>
+#include <globals.h>
 
 /*TODO
 - switch file IO to binary for fast reads
@@ -19,9 +20,6 @@ using namespace std;
 
 using State = cuda::std::array<double, 2>;
 using Param = cuda::std::array<double, 4>;
-
-#define NUM_PARAMS 4
-#define SAMPLES (1 << 20)
 
 #define INPUT_FILE_FP64 "input/standard-parameters-fp64.txt"
 #define INPUT_FILE_FP32 "input/standard-parameters-fp32.txt"
