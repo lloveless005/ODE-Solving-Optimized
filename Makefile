@@ -3,9 +3,9 @@
 CXX 	    = g++
 LD 	        = g++
 NVCC        = nvcc
-CXXFLAGS    = -O3 -march=native -Wall -Wextra -fopenmp
+CXXFLAGS    = -O3 -march=native -Wall -Wextra -fopenmp -ggdb
 NVCCFLAGS   = -O3 -arch=native
-LDFLAGS     = -fopenmp -ggdb
+LDFLAGS     = -fopenmp
 SRC_DIR     = src
 OBJ_DIR     = obj
 BIN_DIR     = build
