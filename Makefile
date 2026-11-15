@@ -32,7 +32,7 @@ $(TARGET_NF): $(OBJ_DIR)/lv-nf.o $(OBJ_DIR)/globals.o | $(BIN_DIR)
 	$(LD) $(LDFLAGS) $^ -o $@
 
 $(OBJ_DIR)/lv-nf.o: $(SRC_DIR)/lv.cpp $(INC_DIR)/globals.h | $(OBJ_DIR)
-	$(CXX) -c -Wall -Wextra -fopenmp $< -o $@
+	$(CXX) -c -I$(INC_DIR) -Wall -Wextra -fopenmp $< -o $@
 
 gpu: $(TARGET_GPU)
 
