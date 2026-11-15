@@ -58,7 +58,7 @@ __global__ void SolveGPU(T* results, const int steps, const T h, const T* param_
             temp_params[idx] = param_set[i * NUM_PARAMS + idx];
         }
 
-        solve_64_ode(steps, temp_state, h, temp_params);
+        solve_fp64_ode(steps, temp_state, h, temp_params);
 
         results[i * 2] = temp_state[0];
         results[i * 2 + 1] = temp_state[1];
@@ -74,7 +74,7 @@ __device__ State<T> ode_val(const Param<T> &params, const State<T> &inState) {
 }
 
 template <typename T>
-__device__ void solve_64_ode(int steps, State<T> &inState, T h, const Param<T> &inParams) {
+__device__ void solve_fp64_ode(int steps, State<T> &inState, T h, const Param<T> &inParams) {
     int current = 0;
 
     while (current < steps) {
@@ -132,8 +132,11 @@ int main() {
     float* param_set_fp32 = nullptr;
     cudaCheckError(cudaMalloc(&param_set_fp32, SAMPLES * NUM_PARAMS * sizeof(float)));
 
-    double* results = nullptr;
-    cudaCheckError(cudaMalloc(&results, SAMPLES * 2 * sizeof(double)));
+    double* device_results_fp64 = nullptr;
+    cudaCheckError(cudaMalloc(&device_results_fp64, SAMPLES * 2 * sizeof(double)));
+
+    float* device_results_fp32 = nullptr;
+    cudaCheckError(cudaMalloc(&device_results_fp32, SAMPLES * 2 * sizeof(float)));
 
     // Fill param_set from file
 
@@ -172,38 +175,78 @@ int main() {
     cout << "Parameter generation time: " << param_ms << " ms" << endl;
 
     if (error_status == 0) {
+
+
+        //
+        // FP64
+        //
+
+
         // CUDA events for benchmarking ODE solving
 
-        cudaEvent_t solve_64_start, solve_64_stop;
-        cudaCheckError(cudaEventCreate(&solve_64_start));
-        cudaCheckError(cudaEventCreate(&solve_64_stop));
+        cudaEvent_t solve_fp64_start, solve_fp64_stop;
+        cudaCheckError(cudaEventCreate(&solve_fp64_start));
+        cudaCheckError(cudaEventCreate(&solve_fp64_stop));
 
-        cudaCheckError(cudaEventRecord(solve_64_start));
+        cudaCheckError(cudaEventRecord(solve_fp64_start));
 
         // Solving ODEs for each parameter set
 
         int blocksSolve = (SAMPLES + THREADS - 1) / THREADS;
-        SolveGPU<<<blocksSolve, THREADS>>>(results, t0, t_end, h, param_set_fp64);
+        SolveGPU<<<blocksSolve, THREADS>>>(device_results_fp64, steps, h, param_set_fp64);
         cudaCheckKernel();
 
         // Copy results array to host
 
-        vector<double> host_results(SAMPLES * 2);
+        vector<double> host_results_fp64(SAMPLES * 2);
         cudaCheckError(cudaDeviceSynchronize());
-        cudaCheckError(cudaMemcpy(host_results.data(), results, SAMPLES * 2  *sizeof(double), cudaMemcpyDeviceToHost));
+        cudaCheckError(cudaMemcpy(host_results_fp64.data(), device_results_fp64, SAMPLES * 2  *sizeof(double), cudaMemcpyDeviceToHost));
 
         // CUDA events for benchmarking ODE solving
 
-        cudaCheckError(cudaEventRecord(solve_64_stop));
-        cudaCheckError(cudaEventSynchronize(solve_64_stop));
-        float solve_64_ms = 0.0;
-        cudaCheckError(cudaEventElapsedTime(&solve_64_ms, solve_64_start, solve_64_stop));
-        cout << "Simulation time: " << solve_64_ms << " ms" << endl;
+        cudaCheckError(cudaEventRecord(solve_fp64_stop));
+        cudaCheckError(cudaEventSynchronize(solve_fp64_stop));
+        float solve_fp64_ms = 0.0;
+        cudaCheckError(cudaEventElapsedTime(&solve_fp64_ms, solve_fp64_start, solve_fp64_stop));
+        cout << "Simulation time: " << solve_fp64_ms << " ms" << endl;
+
+
+        //
+        // FP32
+        //
+
+
+        // CUDA events for benchmarking ODE solving
+
+        cudaEvent_t solve_fp32_start, solve_fp32_stop;
+        cudaCheckError(cudaEventCreate(&solve_fp32_start));
+        cudaCheckError(cudaEventCreate(&solve_fp32_stop));
+
+        cudaCheckError(cudaEventRecord(solve_fp32_start));
+
+        // Solving ODEs for each parameter set
+
+        SolveGPU<<<blocksSolve, THREADS>>>(device_results_fp32, steps, static_cast<float>(h), param_set_fp32);
+        cudaCheckKernel();
+
+        // Copy results array to host
+
+        vector<float> host_results_fp32(SAMPLES * 2);
+        cudaCheckError(cudaDeviceSynchronize());
+        cudaCheckError(cudaMemcpy(host_results_fp32.data(), device_results_fp32, SAMPLES * 2  *sizeof(float), cudaMemcpyDeviceToHost));
+
+        // CUDA events for benchmarking ODE solving
+
+        cudaCheckError(cudaEventRecord(solve_fp32_stop));
+        cudaCheckError(cudaEventSynchronize(solve_fp32_stop));
+        float solve_fp32_ms = 0.0;
+        cudaCheckError(cudaEventElapsedTime(&solve_fp32_ms, solve_fp32_start, solve_fp32_stop));
+        cout << "Simulation time: " << solve_fp32_ms << " ms" << endl;
 
         // Output the head of the states set
 
         for (int idx = 0; idx < 5; idx++) {
-            cout << "State " << idx << ": " << host_results[idx * 2] << " " << host_results[idx * 2 + 1] << endl;
+            cout << "State " << idx << ": " << host_results_fp32[idx * 2] << " " << host_results_fp32[idx * 2 + 1] << endl;
         }
     }
 
@@ -219,7 +262,8 @@ int main() {
 
     cudaCheckError(cudaFree(param_set_fp64));
     cudaCheckError(cudaFree(param_set_fp32));
-    cudaCheckError(cudaFree(results));
+    cudaCheckError(cudaFree(device_results_fp64));
+    cudaCheckError(cudaFree(device_results_fp32));
 
     return error_status;
 }
