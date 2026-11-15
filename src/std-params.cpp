@@ -5,13 +5,29 @@
 #include <format>
 #include <chrono>
 #include <vector>
+#include <algorithm>
+#include <globals.h>
 
-#define FILE_NAME_FP64 "input/standard-parameters-fp64.txt"
-#define FILE_NAME_FP32 "input/standard-parameters-fp32.txt"
-#define NUM_PARAMS 4
-constexpr int SAMPLES = 1 << 20;
+#define FILE_NAME_FP64 "input/standard-parameters-fp64.bin"
+#define FILE_NAME_FP32 "input/standard-parameters-fp32.bin"
 
 using namespace std;
+
+template <typename T>
+bool WriteFile(ofstream& outFile, vector<T>& inList) {
+    constexpr size_t chunk_size = 64*1024*1024;
+    size_t total_bytes = inList.size() * sizeof(T);
+    size_t written = 0;
+
+    while (written < total_bytes) {
+        size_t to_write = min(chunk_size, total_bytes - written);
+        outFile.write(reinterpret_cast<const char*>(&inList[written / sizeof(T)]), to_write);
+        if (!outFile) return false;
+        written += to_write;
+    }
+
+    return true;
+}
 
 int main() {
     auto start_total = chrono::steady_clock::now();
@@ -66,14 +82,16 @@ int main() {
         auto start_write = chrono::steady_clock::now();
 
         // write FP64 parameter set as binary to output file
-        outputFile64.write(reinterpret_cast<const char*>(param_set_fp64.data()), param_set_fp64.size() * sizeof(double));
+        // outputFile64.write(reinterpret_cast<const char*>(param_set_fp64.data()), param_set_fp64.size() * sizeof(double));
+        WriteFile(outputFile64, param_set_fp64);
 
         #pragma omp parallel for 
         for (int idx = 0; idx < SAMPLES * NUM_PARAMS; idx++) {
             param_set_fp32[idx] = static_cast<float>(param_set_fp64[idx]);
         }
 
-        outputFile32.write(reinterpret_cast<const char*>(param_set_fp32.data()), param_set_fp32.size() * sizeof(float));
+        // outputFile32.write(reinterpret_cast<const char*>(param_set_fp32.data()), param_set_fp32.size() * sizeof(float));
+        WriteFile(outputFile32, param_set_fp32);
 
         auto end_write = chrono::steady_clock::now();
         auto elapsed_write = chrono::duration_cast<chrono::milliseconds>(end_write - start_write);
