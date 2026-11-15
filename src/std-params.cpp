@@ -7,31 +7,18 @@
 #include <vector>
 #include <algorithm>
 #include <globals.h>
+#include <writefile.h>
 
 #define FILE_NAME_FP64 "input/standard-parameters-fp64.bin"
 #define FILE_NAME_FP32 "input/standard-parameters-fp32.bin"
 
 using namespace std;
 
-template <typename T>
-bool WriteFile(ofstream& outFile, vector<T>& inList) {
-    constexpr size_t chunk_size = 64*1024*1024;
-    size_t total_bytes = inList.size() * sizeof(T);
-    size_t written = 0;
-
-    while (written < total_bytes) {
-        size_t to_write = min(chunk_size, total_bytes - written);
-        outFile.write(reinterpret_cast<const char*>(&inList[written / sizeof(T)]), to_write);
-        if (!outFile) return false;
-        written += to_write;
-    }
-
-    return true;
-}
-
 int main() {
     auto start_total = chrono::steady_clock::now();
     int error_status = 0;
+
+    cout << endl << "Creating " << SAMPLES << " random parameter sets in FP32 and FP64" << endl << endl;
 
     // initialize output file stream
     ofstream outputFile64;
@@ -86,7 +73,7 @@ int main() {
         WriteFile(outputFile64, param_set_fp64);
 
         #pragma omp parallel for 
-        for (int idx = 0; idx < SAMPLES * NUM_PARAMS; idx++) {
+        for (unsigned long long idx = 0; idx < SAMPLES * NUM_PARAMS; idx++) {
             param_set_fp32[idx] = static_cast<float>(param_set_fp64[idx]);
         }
 
@@ -103,7 +90,7 @@ int main() {
 
     auto end_total = chrono::steady_clock::now();
     auto elapsed_total = chrono::duration_cast<chrono::milliseconds>(end_total - start_total);
-    cout << "Total time: " << elapsed_total.count() << " ms" << endl;
+    cout << "Total time: " << elapsed_total.count() << " ms" << endl << endl;
 
     return error_status;
 }
