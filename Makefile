@@ -14,8 +14,9 @@ TARGET 	    = $(BIN_DIR)/lv
 TARGET_NF   = $(BIN_DIR)/lv-nf
 TARGET_GPU  = $(BIN_DIR)/lv-cu
 TARGET_STDP = $(BIN_DIR)/std-params
+TARGET_COMP = $(BIN_DIR)/comparison
 
-all: $(TARGET) $(TARGET_NF) $(TARGET_GPU) $(TARGET_STDP)
+all: $(TARGET) $(TARGET_NF) $(TARGET_GPU) $(TARGET_STDP) $(TARGET_COMP)
 
 $(TARGET): $(OBJ_DIR)/lv.o | $(BIN_DIR)
 	$(LD) $(LDFLAGS) $^ -o $@
@@ -45,6 +46,14 @@ $(TARGET_STDP): $(OBJ_DIR)/std-params.o | $(BIN_DIR)
 	$(LD) $(LDFLAGS) $^ -o $@
 
 $(OBJ_DIR)/std-params.o: $(SRC_DIR)/std-params.cpp $(INC_DIR)/globals.h | $(OBJ_DIR)
+	$(CXX) -c $(CXXFLAGS) $< -o $@
+
+comparison: $(TARGET_COMP)
+
+$(TARGET_COMP): $(OBJ_DIR)/comparison.o | $(BIN_DIR)
+	$(LD) $(LDFLAGS) $^ -o $@
+
+$(OBJ_DIR)/comparison.o: $(SRC_DIR)/comparison.cpp $(INC_DIR)/globals.h | $(OBJ_DIR)
 	$(CXX) -c $(CXXFLAGS) $< -o $@
 
 clean:

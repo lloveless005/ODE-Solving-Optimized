@@ -1,0 +1,56 @@
+#include <fstream>
+#include <string>
+#include <globals.h>
+#include <vector>
+
+using namespace std;
+
+const string INPUT_FILE_CPU_FP64 = "output/cpu-64-" + to_string(static_cast<int>(log2(SAMPLES))) + ".bin";
+const string INPUT_FILE_GPU_FP64 = "output/gpu-64-" + to_string(static_cast<int>(log2(SAMPLES))) + ".bin";
+const string INPUT_FILE_GPU_FP32 = "output/gpu-32-" + to_string(static_cast<int>(log2(SAMPLES))) + ".bin";
+
+int main() {
+    int error_status = 0;
+
+    ifstream inputCPU64, inputGPU64, inputGPU32;
+
+    inputCPU64.open(INPUT_FILE_CPU_FP64, ios::binary);
+    inputGPU64.open(INPUT_FILE_GPU_FP64, ios::binary);
+    inputGPU32.open(INPUT_FILE_GPU_FP32, ios::binary);
+
+    if (!inputCPU64.is_open()) {
+
+        cout << "Failed to open " << INPUT_FILE_CPU_FP64 << endl;
+        error_status = 1;
+
+    } else if (!inputGPU64.is_open()) {
+
+        cout << "Failed to open " << INPUT_FILE_GPU_FP64 << endl;
+        error_status = 2;
+
+    } else if (!inputGPU32.is_open()) {
+
+        cout << "Failed to open " << INPUT_FILE_GPU_FP32 << endl;
+        error_status = 3;
+
+    } else {
+
+        vector<double> state_cpu64(2 * SAMPLES);
+        vector<double> state_gpu64(2 * SAMPLES);
+        vector<float> state_gpu32(2 * SAMPLES);
+
+        vector<double> cpu_gpu_diff(2 * SAMPLES);
+        vector<double> precision_diff(2 * SAMPLES);
+
+        // Load files into vectors
+
+        inputCPU64.read(reinterpret_cast<char*>(state_cpu64.data()), 2 * SAMPLES * sizeof(double));
+        inputGPU64.read(reinterpret_cast<char*>(state_gpu64.data()), 2 * SAMPLES * sizeof(double));
+        inputGPU32.read(reinterpret_cast<char*>(state_gpu32.data()), 2 * SAMPLES * sizeof(float));
+
+        // Comparisons
+
+    }
+
+    return error_status;
+}
