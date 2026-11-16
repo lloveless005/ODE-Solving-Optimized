@@ -201,7 +201,6 @@ int main() {
         cudaCheckError(cudaEventSynchronize(solve_fp64_stop));
         float solve_fp64_ms = 0.0;
         cudaCheckError(cudaEventElapsedTime(&solve_fp64_ms, solve_fp64_start, solve_fp64_stop));
-        cout << "FP64 simulation time: " << solve_fp64_ms << " ms" << endl;
 
         // Copy results array to host
 
@@ -233,6 +232,8 @@ int main() {
         cudaCheckError(cudaEventSynchronize(solve_fp32_stop));
         float solve_fp32_ms = 0.0;
         cudaCheckError(cudaEventElapsedTime(&solve_fp32_ms, solve_fp32_start, solve_fp32_stop));
+        float ratio = solve_fp64_ms / solve_fp32_ms;
+        cout << "FP64 simulation time: " << solve_fp64_ms << " ms" << "        Ratio: " << ratio << "x slower" << endl;
         cout << "FP32 simulation time: " << solve_fp32_ms << " ms" << endl;
 
         // Copy results array to host
