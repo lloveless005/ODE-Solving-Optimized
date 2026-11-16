@@ -1,6 +1,5 @@
 #include <cuda_runtime.h>
 #include <device_launch_parameters.h>
-#include <curand.h>
 #include <iostream>
 #include <cstdio>
 #include <cuda/std/array>
@@ -8,6 +7,7 @@
 #include <vector>
 #include <fstream>
 #include <globals.h>
+#include <writefile.h>
 #include <cmath>
 
 /*TODO
@@ -25,8 +25,10 @@ using State = cuda::std::array<T, 2>;
 template <typename T>
 using Param = cuda::std::array<T, 4>;
 
-#define INPUT_FILE_FP64 "input/standard-parameters-fp64.txt"
-#define INPUT_FILE_FP32 "input/standard-parameters-fp32.txt"
+#define INPUT_FILE_FP64 "input/standard-parameters-fp64.bin"
+#define INPUT_FILE_FP32 "input/standard-parameters-fp32.bin"
+const string OUTPUT_FILE_FP64 = "output/gpu-64-" + to_string(static_cast<int>(log2(SAMPLES))) + ".bin";
+const string OUTPUT_FILE_FP32 = "output/gpu-32-" + to_string(static_cast<int>(log2(SAMPLES))) + ".bin";
 
 #define THREADS 256
 
@@ -37,16 +39,47 @@ using Param = cuda::std::array<T, 4>;
     } \
 }
 
-#define curandCheckError(call) { \
-    curandStatus_t e = call; \
-    if (e != CURAND_STATUS_SUCCESS) { \
-        fprintf(stderr, "CURAND failure %d at %s:%d\n", e, __FILE__, __LINE__); \
-    } \
-}
-
 #define cudaCheckKernel() cudaCheckError(cudaGetLastError())
 
 
+template <typename T>
+__device__ State<T> ode_val(const Param<T> &params, const State<T> &inState) {
+    return {
+        params[0] * inState[0] - params[1] * inState[0] * inState[1],
+        params[2] * inState[0] * inState[1] - params[3] * inState[1]
+    };
+}
+
+template <typename T>
+__device__ void solve_ode(int steps, State<T> &inState, T h, const Param<T> &inParams) {
+    int current = 0;
+
+    // Constants to avoid template issue
+
+    T two = static_cast<T>(2.0);
+    T six = static_cast<T>(6.0);
+
+    while (current < steps) {
+
+        // Runge-Kutta 4th order solver
+        
+        State<T> k1 = ode_val(inParams, inState);
+
+        State<T> temp_state = {inState[0] + (h * k1[0]) / two, inState[1] + (h * k1[1]) / two};
+        State<T> k2 = ode_val(inParams, temp_state);
+
+        temp_state = {inState[0] + (h * k2[0]) / two, inState[1] + (h * k2[1]) / two};
+        State<T> k3 = ode_val(inParams, temp_state);
+
+        temp_state = {inState[0] + (h * k3[0]), inState[1] + (h * k3[1])};
+        State<T> k4 = ode_val(inParams, temp_state);
+
+        inState[0] += (k1[0] + two * k2[0] + two * k3[0] + k4[0]) * (h / six);
+        inState[1] += (k1[1] + two * k2[1] + two * k3[1] + k4[1]) * (h / six);
+        current++;
+        
+    }
+}
 
 template <typename T>
 __global__ void SolveGPU(T* results, const int steps, const T h, const T* param_set) {
@@ -58,44 +91,10 @@ __global__ void SolveGPU(T* results, const int steps, const T h, const T* param_
             temp_params[idx] = param_set[i * NUM_PARAMS + idx];
         }
 
-        solve_fp64_ode(steps, temp_state, h, temp_params);
+        solve_ode(steps, temp_state, h, temp_params);
 
         results[i * 2] = temp_state[0];
         results[i * 2 + 1] = temp_state[1];
-    }
-}
-
-template <typename T>
-__device__ State<T> ode_val(const Param<T> &params, const State<T> &inState) {
-    return {
-        params[0] * inState[0] - params[1] * inState[0] * inState[1],
-        params[2] * inState[0] * inState[1] - params[3] * inState[1]
-    };
-}
-
-template <typename T>
-__device__ void solve_fp64_ode(int steps, State<T> &inState, T h, const Param<T> &inParams) {
-    int current = 0;
-
-    while (current < steps) {
-
-        // Runge-Kutta 4th order solver
-        
-        State<T> k1 = ode_val(inParams, inState);
-
-        State<T> temp_state = {inState[0] + (h * k1[0]) / 2.0, inState[1] + (h * k1[1]) / 2.0};
-        State<T> k2 = ode_val(inParams, temp_state);
-
-        temp_state = {inState[0] + (h * k2[0]) / 2.0, inState[1] + (h * k2[1]) / 2.0};
-        State<T> k3 = ode_val(inParams, temp_state);
-
-        temp_state = {inState[0] + (h * k3[0]), inState[1] + (h * k3[1])};
-        State<T> k4 = ode_val(inParams, temp_state);
-
-        inState[0] += (k1[0] + 2.0 * k2[0] + 2.0 * k3[0] + k4[0]) * (h / 6.0);
-        inState[1] += (k1[1] + 2.0 * k2[1] + 2.0 * k3[1] + k4[1]) * (h / 6.0);
-        current++;
-        
     }
 }
 
@@ -172,7 +171,7 @@ int main() {
     cudaCheckError(cudaEventSynchronize(param_stop));
     float param_ms = 0.0;
     cudaCheckError(cudaEventElapsedTime(&param_ms, param_start, param_stop));
-    cout << "Parameter generation time: " << param_ms << " ms" << endl;
+    cout << endl << "Parameter read time: " << param_ms << " ms" << endl;
 
     if (error_status == 0) {
 
@@ -208,8 +207,7 @@ int main() {
         cudaCheckError(cudaEventSynchronize(solve_fp64_stop));
         float solve_fp64_ms = 0.0;
         cudaCheckError(cudaEventElapsedTime(&solve_fp64_ms, solve_fp64_start, solve_fp64_stop));
-        cout << "Simulation time: " << solve_fp64_ms << " ms" << endl;
-
+        cout << "FP64 simulation time: " << solve_fp64_ms << " ms" << endl;
 
         //
         // FP32
@@ -241,13 +239,47 @@ int main() {
         cudaCheckError(cudaEventSynchronize(solve_fp32_stop));
         float solve_fp32_ms = 0.0;
         cudaCheckError(cudaEventElapsedTime(&solve_fp32_ms, solve_fp32_start, solve_fp32_stop));
-        cout << "Simulation time: " << solve_fp32_ms << " ms" << endl;
+        cout << "FP32 simulation time: " << solve_fp32_ms << " ms" << endl;
 
-        // Output the head of the states set
 
-        for (int idx = 0; idx < 5; idx++) {
-            cout << "State " << idx << ": " << host_results_fp32[idx * 2] << " " << host_results_fp32[idx * 2 + 1] << endl;
+        // Output results to files
+
+        cudaEvent_t write_start, write_stop;
+        cudaCheckError(cudaEventCreate(&write_start));
+        cudaCheckError(cudaEventCreate(&write_stop));
+
+        cudaCheckError(cudaEventRecord(write_start));
+
+        ofstream outputFile64;
+        outputFile64.open(OUTPUT_FILE_FP64, ios::binary);
+
+        ofstream outputFile32;
+        outputFile32.open(OUTPUT_FILE_FP32, ios::binary);
+
+        if (!outputFile64.is_open()) {
+            cout << "Failed to open " << OUTPUT_FILE_FP64 << endl;
+            error_status = 3; 
+        } else if (!outputFile32.is_open()) {
+            cout << "Failed to open " << OUTPUT_FILE_FP32 << endl;
+            error_status = 4;
+        } else {
+
+            WriteFile(outputFile64, host_results_fp64);
+            WriteFile(outputFile32, host_results_fp32);
+
         }
+
+        outputFile64.close();
+        outputFile32.close();
+
+        // CUDA events for file writing
+
+        cudaCheckError(cudaEventRecord(write_stop));
+        cudaCheckError(cudaEventSynchronize(write_stop));
+        float write_ms = 0.0;
+        cudaCheckError(cudaEventElapsedTime(&write_ms, solve_fp32_start, write_stop));
+        cout << "Write time: " << write_ms << " ms" << endl;
+
     }
 
     // CUDA events for total program benchmark 
@@ -256,7 +288,7 @@ int main() {
     cudaCheckError(cudaEventSynchronize(total_stop));
     float total_ms = 0.0;
     cudaCheckError(cudaEventElapsedTime(&total_ms, total_start, total_stop));
-    cout << "Total time: " << total_ms << " ms" << endl;
+    cout << endl << "Total time: " << total_ms << " ms" << endl;
 
     // Deallocate GPU arrays
 
