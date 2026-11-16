@@ -17,18 +17,15 @@ TARGET_STDP = $(BIN_DIR)/std-params
 
 all: $(TARGET) $(TARGET_NF) $(TARGET_GPU) $(TARGET_STDP)
 
-$(TARGET): $(OBJ_DIR)/lv.o $(OBJ_DIR)/globals.o | $(BIN_DIR)
+$(TARGET): $(OBJ_DIR)/lv.o | $(BIN_DIR)
 	$(LD) $(LDFLAGS) $^ -o $@
 
 $(OBJ_DIR)/lv.o: $(SRC_DIR)/lv.cpp $(INC_DIR)/globals.h | $(OBJ_DIR)
 	$(CXX) -c $(CXXFLAGS) $< -o $@
 
-$(OBJ_DIR)/globals.o: $(SRC_DIR)/globals.cpp $(INC_DIR)/globals.h | $(OBJ_DIR)
-	$(CXX) -c $(CXXFLAGS) $< -o $@
-
 noflags: $(TARGET_NF)
 
-$(TARGET_NF): $(OBJ_DIR)/lv-nf.o $(OBJ_DIR)/globals.o | $(BIN_DIR)
+$(TARGET_NF): $(OBJ_DIR)/lv-nf.o | $(BIN_DIR)
 	$(LD) $(LDFLAGS) $^ -o $@
 
 $(OBJ_DIR)/lv-nf.o: $(SRC_DIR)/lv.cpp $(INC_DIR)/globals.h | $(OBJ_DIR)
@@ -36,7 +33,7 @@ $(OBJ_DIR)/lv-nf.o: $(SRC_DIR)/lv.cpp $(INC_DIR)/globals.h | $(OBJ_DIR)
 
 gpu: $(TARGET_GPU)
 
-$(TARGET_GPU): $(OBJ_DIR)/lv-gpu.o $(OBJ_DIR)/globals.o | $(BIN_DIR)
+$(TARGET_GPU): $(OBJ_DIR)/lv-gpu.o | $(BIN_DIR)
 	$(NVCC) -lcurand $^ -o $@
 
 $(OBJ_DIR)/lv-gpu.o: $(SRC_DIR)/lv-gpu.cu $(INC_DIR)/globals.h | $(OBJ_DIR)
@@ -44,7 +41,7 @@ $(OBJ_DIR)/lv-gpu.o: $(SRC_DIR)/lv-gpu.cu $(INC_DIR)/globals.h | $(OBJ_DIR)
 
 std-params: $(TARGET_STDP)
 
-$(TARGET_STDP): $(OBJ_DIR)/std-params.o $(OBJ_DIR)/globals.o | $(BIN_DIR)
+$(TARGET_STDP): $(OBJ_DIR)/std-params.o | $(BIN_DIR)
 	$(LD) $(LDFLAGS) $^ -o $@
 
 $(OBJ_DIR)/std-params.o: $(SRC_DIR)/std-params.cpp $(INC_DIR)/globals.h | $(OBJ_DIR)

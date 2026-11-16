@@ -1,7 +1,7 @@
 #ifndef GLOBALS_H_
 #define GLOBALS_H_
 
-extern unsigned long long SAMPLES;
-extern int NUM_PARAMS;
+#define SAMPLES (1 << 24)
+#define NUM_PARAMS 4
 
 #endif
