@@ -195,12 +195,6 @@ int main() {
         SolveGPU<<<blocksSolve, THREADS>>>(device_results_fp64, steps, h, param_set_fp64);
         cudaCheckKernel();
 
-        // Copy results array to host
-
-        vector<double> host_results_fp64(SAMPLES * 2);
-        cudaCheckError(cudaDeviceSynchronize());
-        cudaCheckError(cudaMemcpy(host_results_fp64.data(), device_results_fp64, SAMPLES * 2  *sizeof(double), cudaMemcpyDeviceToHost));
-
         // CUDA events for benchmarking ODE solving
 
         cudaCheckError(cudaEventRecord(solve_fp64_stop));
@@ -208,6 +202,12 @@ int main() {
         float solve_fp64_ms = 0.0;
         cudaCheckError(cudaEventElapsedTime(&solve_fp64_ms, solve_fp64_start, solve_fp64_stop));
         cout << "FP64 simulation time: " << solve_fp64_ms << " ms" << endl;
+
+        // Copy results array to host
+
+        vector<double> host_results_fp64(SAMPLES * 2);
+        cudaCheckError(cudaDeviceSynchronize());
+        cudaCheckError(cudaMemcpy(host_results_fp64.data(), device_results_fp64, SAMPLES * 2  *sizeof(double), cudaMemcpyDeviceToHost));
 
         //
         // FP32
@@ -227,12 +227,6 @@ int main() {
         SolveGPU<<<blocksSolve, THREADS>>>(device_results_fp32, steps, static_cast<float>(h), param_set_fp32);
         cudaCheckKernel();
 
-        // Copy results array to host
-
-        vector<float> host_results_fp32(SAMPLES * 2);
-        cudaCheckError(cudaDeviceSynchronize());
-        cudaCheckError(cudaMemcpy(host_results_fp32.data(), device_results_fp32, SAMPLES * 2  *sizeof(float), cudaMemcpyDeviceToHost));
-
         // CUDA events for benchmarking ODE solving
 
         cudaCheckError(cudaEventRecord(solve_fp32_stop));
@@ -241,6 +235,11 @@ int main() {
         cudaCheckError(cudaEventElapsedTime(&solve_fp32_ms, solve_fp32_start, solve_fp32_stop));
         cout << "FP32 simulation time: " << solve_fp32_ms << " ms" << endl;
 
+        // Copy results array to host
+
+        vector<float> host_results_fp32(SAMPLES * 2);
+        cudaCheckError(cudaDeviceSynchronize());
+        cudaCheckError(cudaMemcpy(host_results_fp32.data(), device_results_fp32, SAMPLES * 2  *sizeof(float), cudaMemcpyDeviceToHost));
 
         // Output results to files
 
@@ -277,7 +276,7 @@ int main() {
         cudaCheckError(cudaEventRecord(write_stop));
         cudaCheckError(cudaEventSynchronize(write_stop));
         float write_ms = 0.0;
-        cudaCheckError(cudaEventElapsedTime(&write_ms, solve_fp32_start, write_stop));
+        cudaCheckError(cudaEventElapsedTime(&write_ms, write_start, write_stop));
         cout << "Write time: " << write_ms << " ms" << endl;
 
     }
