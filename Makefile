@@ -57,7 +57,7 @@ $(OBJ_DIR)/comparison.o: $(SRC_DIR)/comparison.cpp $(INC_DIR)/globals.h | $(OBJ_
 	$(CXX) -c $(CXXFLAGS) $< -o $@
 
 clean:
-	rm -rf $(OBJ_DIR) $(BIN_DIR)
+	rm -f $(BIN_DIR)/* $(OBJ_DIR)/*.o ./input/* ./output/*
 
 $(OBJ_DIR) $(BIN_DIR):
 	mkdir -p $@
