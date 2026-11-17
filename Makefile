@@ -35,7 +35,7 @@ $(OBJ_DIR)/lv-nf.o: $(SRC_DIR)/lv.cpp $(INC_DIR)/globals.h | $(OBJ_DIR)
 gpu: $(TARGET_GPU)
 
 $(TARGET_GPU): $(OBJ_DIR)/lv-gpu.o | $(BIN_DIR)
-	$(NVCC) -lcurand $^ -o $@
+	$(NVCC) $^ -o $@
 
 $(OBJ_DIR)/lv-gpu.o: $(SRC_DIR)/lv-gpu.cu $(INC_DIR)/globals.h | $(OBJ_DIR)
 	$(NVCC) -c -I$(INC_DIR) $(NVCCFLAGS) $< -o $@
