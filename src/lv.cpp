@@ -27,7 +27,6 @@ using State = array<double, 2>;
 using Param = array<double, 4>;
 
 #define INPUT_FILE_FP64 "input/standard-parameters-fp64.bin"
-constexpr bool use_input_file = true;
 const string OUTPUT_FILE_FP64 = "output/cpu-64-" + to_string(static_cast<int>(log2(SAMPLES))) + ".bin";
 
 
@@ -67,49 +66,25 @@ int main() {
 
     auto start_total = chrono::steady_clock::now();
 
-    constexpr Param default_params = {1.0, 0.1, 0.075, 1.5};
-
     constexpr double t0 = 0.0;
     constexpr double t_end = 10.0;
     constexpr double h = 0.1;
     constexpr int steps = ceil((t_end - t0) / h);
 
-    // Generate 2**20 random parameters within +-15% of the default values 
+    // Fill param_set from file
+
     vector<double> param_set_fp64(SAMPLES * NUM_PARAMS);
 
-    if (use_input_file) {
+    ifstream inputFile64;
+    inputFile64.open(INPUT_FILE_FP64);
 
-        // Fill param_set from file
-
-        ifstream inputFile64;
-        inputFile64.open(INPUT_FILE_FP64);
-
-        if (!inputFile64.is_open()) {
-            cout << "Failed to open " << INPUT_FILE_FP64 << endl;
-            error_status = 1;
-        } else {
-            inputFile64.read(reinterpret_cast<char*>(param_set_fp64.data()), SAMPLES * NUM_PARAMS * sizeof(double));
-        }
-
+    if (!inputFile64.is_open()) {
+        cout << "Failed to open " << INPUT_FILE_FP64 << endl;
+        error_status = 1;
     } else {
-
-        // Generate random parameters if there is no file
-
-        #pragma omp parallel
-        {
-            int tid = omp_get_thread_num();
-            mt19937 gen(1337 + tid);
-            uniform_real_distribution<double> dist(0.0, 1.0);
-
-            #pragma omp for
-            for (size_t i = 0; i < SAMPLES; i++) {
-                for (int j = 0; j < NUM_PARAMS; j++) {
-                    param_set_fp64[i * NUM_PARAMS + j] = (0.85 + 0.3 * dist(gen)) * default_params[j];
-                }
-            }
-        }
-
+        inputFile64.read(reinterpret_cast<char*>(param_set_fp64.data()), SAMPLES * NUM_PARAMS * sizeof(double));
     }
+
 
     // Output benchmark for parameter reading/generation
 
@@ -163,9 +138,7 @@ int main() {
     auto end_write = chrono::steady_clock::now();
     auto elapsed_write = chrono::duration_cast<chrono::milliseconds>(end_write - start_write);
 
-    cout << endl;
-    if (use_input_file) cout << "Parameter read time: " << elapsed_params.count() << " ms\n";
-    else cout << "Parameter generation time: " << elapsed_params.count() << " ms\n";
+    cout << endl << "Parameter read time: " << elapsed_params.count() << " ms\n";
     cout << "Simulation time: " << elapsed_sim_fp64.count() << " ms\n";
     cout << "Write time: " << elapsed_write.count() << " ms" << endl;
 
