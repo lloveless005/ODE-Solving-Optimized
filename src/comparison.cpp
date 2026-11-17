@@ -7,7 +7,6 @@
 #include <cmath>
 #include <omp.h>
 #include <numeric>
-#include <chrono>
 
 using namespace std;
 
@@ -94,8 +93,6 @@ int main() {
 
         // Average difference
 
-        auto avg_start = chrono::steady_clock::now();
-
         double cg_sum = 0.0;
         double p_sum = 0.0;
 
@@ -108,11 +105,6 @@ int main() {
         for (size_t idx = 0; idx < precision_diff.size(); idx++) p_sum += precision_diff[idx];
 
         double p_avg = p_sum / precision_diff.size();
-
-        auto avg_end = chrono::steady_clock::now();
-        auto avg_elapsed = chrono::duration_cast<chrono::milliseconds>(avg_end - avg_start);
-
-        cout << endl << "Sum and avg time: " << avg_elapsed << endl;
 
         cout << endl << "Average relative difference between CPU FP64 and GPU FP64: " << cg_avg << endl;
         cout << "Average relative difference between GPU FP64 and GPU FP32: " << p_avg << endl;
