@@ -2,6 +2,8 @@
 #define WRITEFILE_H_
 
 #include <fstream>
+#include <vector>
+#include <algorithm>
 
 using namespace std;
 
