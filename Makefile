@@ -1,4 +1,4 @@
-.PHONY: all clean gpu noflags std-params
+.PHONY: all clean gpu noflags std-params comparison
 
 CXX 	    = g++
 LD 	        = g++
