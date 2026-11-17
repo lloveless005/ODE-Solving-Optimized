@@ -6,6 +6,8 @@
 #include <iostream>
 #include <cmath>
 #include <omp.h>
+#include <numeric>
+#include <chrono>
 
 using namespace std;
 
@@ -69,8 +71,52 @@ int main() {
         max_cpu_gpu_diff = *max_element(cpu_gpu_diff.begin(), cpu_gpu_diff.end());
         max_precision_diff = *max_element(precision_diff.begin(), precision_diff.end());
 
-        cout << endl << "Max difference between CPU FP64 and GPU FP64: " << max_cpu_gpu_diff << endl;
-        cout << "Max difference between GPU FP64 and GPU FP32: " << max_precision_diff << endl;
+        cout << endl << "Max absolute difference between CPU FP64 and GPU FP64: " << max_cpu_gpu_diff << endl;
+        cout << "Max absolute difference between GPU FP64 and GPU FP32: " << max_precision_diff << endl;
+
+        // Relative difference
+
+        #pragma omp parallel for
+        for (size_t idx = 0; idx < 2 * SAMPLES; idx++) {
+            cpu_gpu_diff[idx] /= abs(state_cpu64[idx]);
+        }
+
+        #pragma omp parallel for
+        for (size_t idx = 0; idx < 2 * SAMPLES; idx++) {
+            precision_diff[idx] /= abs(state_gpu64[idx]);
+        }
+
+        max_cpu_gpu_diff = *max_element(cpu_gpu_diff.begin(), cpu_gpu_diff.end());
+        max_precision_diff = *max_element(precision_diff.begin(), precision_diff.end());
+
+        cout << endl << "Max relative difference between CPU FP64 and GPU FP64: " << max_cpu_gpu_diff << endl;
+        cout << "Max relative difference between GPU FP64 and GPU FP32: " << max_precision_diff << endl;
+
+        // Average difference
+
+        auto avg_start = chrono::steady_clock::now();
+
+        double cg_sum = 0.0;
+        double p_sum = 0.0;
+
+        #pragma omp parallel for reduction(+:cg_sum)
+        for (size_t idx = 0; idx < cpu_gpu_diff.size(); idx++) cg_sum += cpu_gpu_diff[idx];
+
+        double cg_avg = cg_sum / cpu_gpu_diff.size();
+
+        #pragma omp parallel for reduction(+:p_sum)
+        for (size_t idx = 0; idx < precision_diff.size(); idx++) p_sum += precision_diff[idx];
+
+        double p_avg = p_sum / precision_diff.size();
+
+        auto avg_end = chrono::steady_clock::now();
+        auto avg_elapsed = chrono::duration_cast<chrono::milliseconds>(avg_end - avg_start);
+
+        cout << endl << "Sum and avg time: " << avg_elapsed << endl;
+
+        cout << endl << "Average relative difference between CPU FP64 and GPU FP64: " << cg_avg << endl;
+        cout << "Average relative difference between GPU FP64 and GPU FP32: " << p_avg << endl;
+
 
     }
 
